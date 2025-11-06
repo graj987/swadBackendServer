@@ -10,6 +10,7 @@
   "name": "backend",
   "version": "1.0.0",
   "description": "",
+  "type": "module",
   "main": "server.js",
   "devDependencies": {},
   "scripts": {
