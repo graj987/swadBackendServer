@@ -1,5 +1,5 @@
 import Product from "../models/productModel.js";
-import Order from "../models/Order.js";
+import Order from "../models/order.js";
 
 /**
  * Products
