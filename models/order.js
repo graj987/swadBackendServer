@@ -19,26 +19,16 @@ const orderSchema = new mongoose.Schema(
       },
     ],
 
-    // ₹ amount in integer (store in paise if using Razorpay)
     totalAmount: { type: Number, required: true },
-
-    // Address where order will be delivered
     address: { type: String, required: true },
 
-    // -------------------------------
-    // 🔥 Razorpay fields (IMPORTANT)
-    // -------------------------------
     razorpay_order_id: { type: String },
     razorpay_payment_id: { type: String },
     razorpay_signature: { type: String },
 
-    // “INR only” enforcement / logs
     paymentCurrency: { type: String, default: "INR" },
     cardCountry: { type: String, default: null },
 
-    // -------------------------------
-    // 🔥 Status fields
-    // -------------------------------
     paymentStatus: {
       type: String,
       enum: ["pending", "paid", "failed", "refunded"],
@@ -51,15 +41,11 @@ const orderSchema = new mongoose.Schema(
       default: "preparing",
     },
 
-    // -------------------------------
-    // 🔍 Detailed payment log (optional)
-    // -------------------------------
     paymentDetails: {
       type: Object,
       default: {},
     },
 
-    // For auto-refund records
     refundDetails: {
       type: Object,
       default: null,
@@ -68,4 +54,4 @@ const orderSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-export default mongoose.model("Order", orderSchema);
+export default (mongoose.models.Order || mongoose.model("Order", orderSchema));
