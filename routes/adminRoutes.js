@@ -5,6 +5,7 @@ import {
   getAllOrders,
   addProduct,
   deleteProduct,
+  getStats,
 } from "../controllers/adminController.js";
 import { protectAdmin } from "../middleware/adminMiddleware.js";
 
@@ -16,6 +17,7 @@ router.post("/login", loginAdmin);
 
 // Protected routes
 router.get("/orders", protectAdmin, getAllOrders);
+router.get("/stats", protectAdmin, getStats);  
 router.post("/product", protectAdmin, addProduct);
 router.delete("/product/:id", protectAdmin, deleteProduct);
 

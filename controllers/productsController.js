@@ -30,3 +30,12 @@ export const addProduct = async (req, res) => {
     res.status(400).json({ message: "Error adding product" });
   }
 };
+export const getProductsCount = async (req, res) => {
+  try {
+    const count = await Product.countDocuments();
+    res.json({ count });
+  } catch (err) {
+    console.error("getProductsCount:", err);
+    res.status(500).json({ message: "Failed to fetch products count", error: err.message });
+  }
+};

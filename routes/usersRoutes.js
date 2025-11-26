@@ -6,7 +6,8 @@ import {
   updateUserProfile,
   getAllUsers,
   deleteUserById,
-  getUserById
+  getUserById,
+  getUsersCount,
 } from "../controllers/usersController.js";
 
 import { protect } from "../middleware/auth.js";            // ✅ correct user auth
@@ -28,5 +29,6 @@ router.put("/profile", protect, upload.single("avatar"), updateUserProfile);
 router.get("/", protectAdmin, getAllUsers);
 router.get("/:id", protectAdmin, getUserById);
 router.delete("/:id", protectAdmin, deleteUserById);
+router.get("/count", getUsersCount);
 
 export default router;

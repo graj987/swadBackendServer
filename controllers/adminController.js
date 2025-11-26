@@ -2,6 +2,7 @@ import Admin from "../models/admin.js";
 import jwt from "jsonwebtoken";
 import Product from "../models/productModel.js";
 import order from "../models/order.js";
+import userModel from "../models/userModel.js";
 import bcrypt from "bcryptjs";
 
 // Generate JWT Token
@@ -58,9 +59,19 @@ export const loginAdmin = async (req, res) => {
 // @desc Get all orders (Admin only)
 export const getAllOrders = async (req, res) => {
   try {
-    const orders = await Order.find().populate("user", "name email");
+    const orders = await order.find().populate("user", "name email");
     res.json(orders);
   } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+export const getAllUsers = async (req, res) => {
+  try {
+    const users = await userModel.find().select("-password");
+    res.json(users);
+  }
+  catch (err) {
     res.status(500).json({ message: err.message });
   }
 };
@@ -96,5 +107,19 @@ export const deleteProduct = async (req, res) => {
     res.json({ message: "Product deleted successfully" });
   } catch (err) {
     res.status(500).json({ message: err.message });
+  }
+};
+
+export const getStats = async (req, res) => {
+  try {
+    const [usersCount, productsCount, ordersCount] = await Promise.all([
+      User.countDocuments(),
+      Product.countDocuments(),
+      Order.countDocuments()
+    ]);
+    return res.json({ usersCount, productsCount, ordersCount });
+  } catch (err) {
+    console.error("getStats error:", err);
+    return res.status(500).json({ message: "Failed to fetch stats", error: err.message });
   }
 };

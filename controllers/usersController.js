@@ -131,3 +131,12 @@ export const getUserById = async (req, res) => {
     return res.status(500).json({ message: "Error fetching user", error: error.message });
   }
 };
+export const getUsersCount = async (req,res) => {
+  try {
+    const count = await User.countDocuments();
+    res.json({ count });
+  } catch (err) {
+    console.error("getUsersCount:", err);
+    res.status(500).json({ message: "Failed to fetch users count", error: err.message });
+  }
+};

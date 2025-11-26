@@ -1,8 +1,9 @@
-// backend/middleware/auth.js
+// middleware/auth.js
 import jwt from "jsonwebtoken";
-import User from "../models/userModel.js"; // <-- make sure this path matches your project
+import User from "../models/userModel.js";
 
 export const protect = async (req, res, next) => {
+  console.log("AUTH HEADER:", req.headers.authorization);
   try {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -10,11 +11,15 @@ export const protect = async (req, res, next) => {
     }
 
     const token = authHeader.split(" ")[1];
-
     let decoded;
     try {
       decoded = jwt.verify(token, process.env.JWT_SECRET);
     } catch (err) {
+      // Distinguish expired token vs other JWT errors
+      if (err.name === "TokenExpiredError") {
+        console.warn("JWT verify failed (user): TokenExpiredError", err.expiredAt);
+        return res.status(401).json({ message: "TokenExpiredError: jwt expired", expiredAt: err.expiredAt });
+      }
       console.error("JWT verify failed (user):", err);
       return res.status(401).json({ message: "Not authorized, invalid token" });
     }
@@ -30,4 +35,5 @@ export const protect = async (req, res, next) => {
     console.error("protect (user) middleware error:", err);
     return res.status(500).json({ message: "Auth error", error: err.message });
   }
+
 };
