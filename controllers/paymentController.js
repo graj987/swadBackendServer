@@ -34,11 +34,6 @@ async function refundPayment(paymentId, amountPaise) {
   }
 }
 
-/**
- * Create a Razorpay order for an existing DB order
- * Body: { orderId: "<mongoOrderId>" }
- * Returns the razorpay order object
- */
 export const createRazorpayOrder = async (req, res) => {
   try {
     const { orderId } = req.body;

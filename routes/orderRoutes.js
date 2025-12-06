@@ -6,6 +6,7 @@ import {
   addProduct,
   createOrder,
   getOrdersByUser,
+  getOrdersCount,
 } from "../controllers/orderController.js";
 
 const router = express.Router();
@@ -18,5 +19,6 @@ router.post("/products", addProduct);
 /* ORDER ROUTES */
 router.post("/orders", createOrder);         // Create new order
 router.get("/orders/user/:userId", getOrdersByUser);  // Get all user's orders
+router.get("/count", getOrdersCount);
 
 export default router;

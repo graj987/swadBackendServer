@@ -121,14 +121,16 @@ export const getAllUsers = async (req, res) => {
 };
 export const getUserById = async (req, res) => {
   try {
-    const userId = req.params.id;
-    const user = await User.findById(userId).select("-password");
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: "Invalid user id" });
+    }
+    const user = await User.findById(id).select("-password");
     if (!user) return res.status(404).json({ message: "User not found" });
-    return res.json(user);
-  }
-  catch (error) {
-    console.error("getUserById error:", error);
-    return res.status(500).json({ message: "Error fetching user", error: error.message });
+    res.json(user);
+  } catch (err) {
+    console.error("getUserById error:", err);
+    res.status(500).json({ message: "Server error", error: err.message });
   }
 };
 export const getUsersCount = async (req,res) => {

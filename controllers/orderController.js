@@ -94,3 +94,13 @@ export const getOrdersByUser = async (req, res) => {
     return res.status(500).json({ message: "Error fetching orders" });
   }
 };
+
+export const getOrdersCount = async (req,res) => {
+  try {
+    const count = await Order.countDocuments();
+    res.json({ count });
+  } catch (err) {
+    console.error("getOrdersCount:", err);
+    res.status(500).json({ message: "Failed to fetch orders count", error: err.message });
+  }
+};
