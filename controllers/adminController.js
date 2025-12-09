@@ -2,7 +2,7 @@ import Admin from "../models/admin.js";
 import jwt from "jsonwebtoken";
 import Product from "../models/productModel.js";
 import Order from "../models/order.js";
-import User from "../models/userModel.js";
+import {User} from "../models/userModel.js";
 import bcrypt from "bcryptjs";
 import { createHash } from "crypto";
 import cloudinary from "cloudinary";

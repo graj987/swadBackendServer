@@ -1,18 +1,15 @@
 import mongoose from "mongoose";
-import bcrypt from "bcryptjs";
 
-const userSchema = new mongoose.Schema(
-  {
-    name: { type: String, required: true },
-    email: { type: String, required: true, unique: true },
-    password: { type: String, required: true },
-    address: { type: String },
-    phone: { type: String },
-  },
-  { timestamps: true }
-);
+const userSchema = new mongoose.Schema({
+  name: {type: String, required: true },
+  email: { type: String, required: true, unique: true },
+  password: { type: String, required: true },
+  isVerified: { type: Boolean, default: false },
+  isLoggedIn: { type: Boolean, default: false },
+  token: { type: String, default: null },
+  otp: { type: String, default: null },
+  otpExpiry: { type: Date, default: null },
 
-// Encrypt password before saving
+},{timestamps:true});
 
-
-export default mongoose.model("User", userSchema);
+export const User = mongoose.model("User", userSchema);
