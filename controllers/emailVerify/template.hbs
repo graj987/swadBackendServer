@@ -1,20 +1,124 @@
-
-{{!-- create a template to show on email with beautifull html and css --}}
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Email Verification</title>
+  
+  <style>
+    /* -------- Email Safe Styles -------- */
+    body {
+      background-color: #f5f7fa;
+      margin: 0;
+      padding: 0;
+      font-family: Arial, Helvetica, sans-serif;
+      color: #333;
+    }
+
+    .email-container {
+      max-width: 600px;
+      margin: 40px auto;
+      background: #ffffff;
+      border-radius: 12px;
+      overflow: hidden;
+      border: 1px solid #e6e6e6;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.06);
+    }
+
+    .header {
+      background: linear-gradient(135deg, #28a745, #1e8b37);
+      padding: 25px;
+      text-align: center;
+      color: #ffffff;
+    }
+
+    .header h1 {
+      margin: 0;
+      font-size: 26px;
+      font-weight: bold;
+    }
+
+    .content {
+      padding: 30px;
+      line-height: 1.6;
+      font-size: 16px;
+      color: #444;
+    }
+
+    .btn {
+      display: inline-block;
+      background: #28a745;
+      color: white !important;
+      text-decoration: none;
+      padding: 14px 22px;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: bold;
+      margin-top: 20px;
+    }
+
+    .btn:hover {
+      background: #23963d;
+    }
+
+    .footer {
+      text-align: center;
+      padding: 20px;
+      background: #f1f1f1;
+      font-size: 14px;
+      color: #777;
+    }
+
+    .footer a {
+      color: #28a745;
+      text-decoration: none;
+    }
+
+  </style>
 </head>
+
 <body>
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #ddd; border-radius: 5px;">
-        <h2 style="color: #333;">Email Verification</h2>
-        <p>Thank you for registering with us! Please click the button below to verify your email address:</p>
-        <a href="http://localhost:5000/api/users/verify-email?token={{token}}" style="display: inline-block; padding: 10px 20px; color: #fff; background-color: #28a745; text-decoration: none; border-radius: 5px;">Verify Email</a>
-        <p style="margin-top: 20px;">If you did not sign up for this account, please ignore this email.</p>
-        <p>Best regards,<br/>The Swadbest Team</p>
+  <div class="email-container">
+    
+    <!-- HEADER -->
+    <div class="header">
+      <h1>SwadBest</h1>
     </div>
-            
+
+    <!-- BODY -->
+    <div class="content">
+      <h2>Email Verification</h2>
+
+      <p>
+        Thanks for signing up!  
+        To complete your registration, please verify your email address by clicking the button below.
+      </p>
+
+      <p style="text-align: center;">
+        <a href="{{verifyLink}}" class="btn">Verify Email</a>
+      </p>
+
+      <p>
+        If the button doesn’t work, copy and paste this link in your browser:
+      </p>
+
+      <p style="word-break: break-all; font-size: 14px; color: #666;">
+        {{verifyLink}}
+      </p>
+
+      <p>
+        If you didn’t create an account, you can safely ignore this email.
+      </p>
+
+      <p>Best regards,<br/>The SwadBest Team</p>
+    </div>
+
+    <!-- FOOTER -->
+    <div class="footer">
+      © {{year}} SwadBest. All rights reserved.<br/>
+      Need help? <a href="mailto:support@swadbest.com">Contact Support</a>
+    </div>
+
+  </div>
 </body>
 </html>

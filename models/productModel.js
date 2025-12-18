@@ -26,7 +26,8 @@ const productSchema = new mongoose.Schema(
     },
     stock: {
       type: Number,
-      default: 10, // you can increase as you scale up
+      required: true,
+      min:0,// you can increase as you scale up
     },
     isAvailable: {
       type: Boolean,

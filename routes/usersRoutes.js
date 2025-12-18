@@ -2,49 +2,64 @@ import express from "express";
 import {
   registerUser,
   loginUser,
-  getUserProfile,
-  updateUserProfile,
-  getAllUsers,
-  deleteUserById,
-  getUserById,
-  getUsersCount,
-  verification,
   logoutUser,
+  verification,
   forgotPassword,
   verifyOTP,
-  changePassword,
+  resetPassword,
+  getUserProfile,
+  updateUserProfile,
 } from "../controllers/usersController.js";
 
-
-
-import { isAuthenticated } from "../middleware/auth.js";            // ✅ correct user auth
-import { protectAdmin } from "../middleware/adminMiddleware.js"; // admin auth
+import { isAuthenticated } from "../middleware/auth.js";
 
 import multer from "multer";
 import { userSchema, validateUser } from "../validators/userValidate.js";
 
+const router = express.Router();
 const upload = multer({ dest: "uploads/" });
 
-const router = express.Router();
+/* ================= AUTH ================= */
 
+// Register
+router.post(
+  "/register",
+  validateUser(userSchema),
+  registerUser
+);
 
-// Auth
-router.post("/register",validateUser(userSchema), registerUser);
+// Email verification (Bearer token)
 router.post("/verify", verification);
+
+// Login / Logout
 router.post("/login", loginUser);
 router.post("/logout", isAuthenticated, logoutUser);
-router.post("/forgot-password",forgotPassword); 
-router.post("/verify_otp/:email",verifyOTP)
-router.post("/change-password/:email",changePassword)
 
-// User profile
+/* ================= PASSWORD RESET (INDUSTRY FLOW) ================= */
+
+// 1️⃣ Send OTP
+router.post("/forgot-password", forgotPassword);
+
+// 2️⃣ Verify OTP → get resetToken
+router.post("/verify-otp", verifyOTP); 
+// email + otp in BODY (NOT URL)
+
+// 3️⃣ Reset password (token-based)
+router.post("/reset-password", resetPassword);
+// Authorization: Bearer <resetToken>
+
+router.post("/change-password", resetPassword);
+/* ================= USER PROFILE ================= */
+
 router.get("/profile", isAuthenticated, getUserProfile);
-router.put("/profile", isAuthenticated, upload.single("avatar"), updateUserProfile);
 
-// ADMIN ONLY
-router.get("/", protectAdmin, getAllUsers);
-router.get("/count", protectAdmin, getUsersCount);
-router.get("/:id", protectAdmin, getUserById);
-router.delete("/:id", protectAdmin, deleteUserById);
+router.put(
+  "/profile",
+  isAuthenticated,
+  upload.single("avatar"),
+  updateUserProfile
+);
+
+
 
 export default router;

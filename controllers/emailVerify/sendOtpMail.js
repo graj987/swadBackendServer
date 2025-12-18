@@ -1,30 +1,114 @@
-// sendOtpEmail.js
-import nodemailer from 'nodemailer';
-import dotenv from 'dotenv';
+import nodemailer from "nodemailer";
+import dotenv from "dotenv";
 dotenv.config();
 
 export const sendOtpEmail = async (otp, email) => {
   try {
     const transporter = nodemailer.createTransport({
-      service: 'gmail',
+      service: "gmail",
       auth: {
         user: process.env.MAIL_USER,
-        pass: process.env.MAIL_PASS, // must be app password if Gmail
-      },
-      tls: { rejectUnauthorized: false },
+        pass: process.env.MAIL_PASS,
+      }
     });
 
+    const htmlTemplate = `
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8" />
+      <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <title>Password Reset OTP</title>
+
+      <style>
+        body {
+          background-color: #f5f7fa;
+          margin: 0;
+          padding: 0;
+          font-family: Arial, sans-serif;
+          color: #333;
+        }
+        .container {
+          max-width: 600px;
+          margin: 40px auto;
+          background: #ffffff;
+          border-radius: 12px;
+          padding: 30px;
+          box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+          border: 1px solid #e6e6e6;
+        }
+        .header {
+          text-align: center;
+          margin-bottom: 30px;
+        }
+        .header h1 {
+          margin: 0;
+          font-size: 24px;
+          color: #28a745;
+        }
+        .otp-box {
+          text-align: center;
+          background-color: #f0fff4;
+          border: 1px solid #c7f5d6;
+          padding: 15px;
+          font-size: 32px;
+          font-weight: bold;
+          border-radius: 8px;
+          color: #1e8b37;
+          letter-spacing: 4px;
+          margin: 20px 0;
+        }
+        .info {
+          font-size: 15px;
+          margin-bottom: 20px;
+          line-height: 1.5;
+        }
+        .footer {
+          text-align: center;
+          margin-top: 30px;
+          font-size: 13px;
+          color: #777;
+        }
+      </style>
+    </head>
+
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>SwadBest Security</h1>
+        </div>
+
+        <p class="info">
+          Use the OTP below to reset your password.  
+          This code is valid for the next <strong>10 minutes</strong>.
+        </p>
+
+        <div class="otp-box">${otp}</div>
+
+        <p class="info">
+          If you didn’t request a password reset, please ignore this email.
+        </p>
+
+        <div class="footer">
+          © ${new Date().getFullYear()} SwadBest. All rights reserved.
+        </div>
+      </div>
+    </body>
+    </html>
+    `;
+
     const mailOptions = {
-      from: process.env.MAIL_USER,
+      from: `"SwadBest Security" <${process.env.MAIL_USER}>`,
       to: email,
-      subject: 'Password Reset OTP',
-      html: `<p>Your OTP is <strong>${otp}</strong> — valid for 10 minutes.</p>`
+      subject: "Your SwadBest Password Reset OTP",
+      html: htmlTemplate,
     };
 
     const result = await transporter.sendMail(mailOptions);
     return result;
+
   } catch (err) {
-    console.error('sendOtpEmail error:', err);
+    console.error("sendOtpEmail error:", err.message);
     throw err;
   }
 };
