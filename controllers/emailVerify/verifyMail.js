@@ -25,7 +25,7 @@ export const verifyMail = async (token, email) => {
         const verifyUrl = `${FRONTEND_VERIFY_URL}?token=${encodeURIComponent(token)}`;
 
         const htmlToSend = template({
-            verifyLink,
+            verifyLink: verifyUrl,
             year: new Date().getFullYear()
         });
 

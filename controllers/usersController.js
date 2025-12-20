@@ -69,7 +69,6 @@ export const verification = async (req, res) => {
     return res.status(401).json({ success: false, message: "Invalid or expired token" });
   }
 };
-
 /* =====================================================
    LOGIN
 ===================================================== */
@@ -114,7 +113,6 @@ export const loginUser = async (req, res) => {
     return res.status(500).json({ success: false, message: err.message });
   }
 };
-
 /* =====================================================
    LOGOUT
 ===================================================== */
@@ -132,7 +130,6 @@ export const logoutUser = async (req, res) => {
     return res.status(500).json({ success: false, message: err.message });
   }
 };
-
 /* =====================================================
    FORGOT PASSWORD (SEND OTP)
 ===================================================== */
@@ -156,7 +153,6 @@ export const forgotPassword = async (req, res) => {
     return res.status(500).json({ success: false, message: err.message });
   }
 };
-
 /* =====================================================
    VERIFY OTP → ISSUE RESET TOKEN
 ===================================================== */
@@ -191,7 +187,6 @@ export const verifyOTP = async (req, res) => {
     return res.status(500).json({ success: false, message: err.message });
   }
 };
-
 /* =====================================================
    RESET PASSWORD (TOKEN BASED)
 ===================================================== */
@@ -248,8 +243,6 @@ export const resetPassword = async (req, res) => {
     });
   }
 };
-
-
 export const changePassword = async (req, res) => {
   try {
     const userId = req.user?.id;
@@ -271,7 +264,6 @@ export const changePassword = async (req, res) => {
     return res.status(500).json({ success: false, message: err.message });
   }
 };
-
 /* =====================================================
    PROFILE
 ===================================================== */
@@ -287,7 +279,6 @@ export const getUserProfile = async (req, res) => {
     return res.status(500).json({ success: false, message: err.message });
   }
 };
-
 export const updateUserProfile = async (req, res) => {
   try {
     const userId = req.user?.id;
