@@ -30,7 +30,7 @@ export const verifyMail = async (token, email) => {
 
     // Send email via Resend
     await resend.emails.send({
-      from: "SwadBest <onboarding@resend.dev>",
+      from: "SwadBest <no-reply@swadbest.com>",
       to: email,
       subject: "Verify Your Email",
       html: htmlToSend,
