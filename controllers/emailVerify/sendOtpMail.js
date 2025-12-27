@@ -1,17 +1,11 @@
-import nodemailer from "nodemailer";
+import { Resend } from "resend";
 import dotenv from "dotenv";
 dotenv.config();
 
+const resend = new Resend(process.env.RESEND_API_KEY);
+
 export const sendOtpEmail = async (otp, email) => {
   try {
-    const transporter = nodemailer.createTransport({
-      service: "gmail",
-      auth: {
-        user: process.env.MAIL_USER,
-        pass: process.env.MAIL_PASS,
-      }
-    });
-
     const htmlTemplate = `
     <!DOCTYPE html>
     <html lang="en">
@@ -79,14 +73,14 @@ export const sendOtpEmail = async (otp, email) => {
         </div>
 
         <p class="info">
-          Use the OTP below to reset your password.  
+          Use the OTP below to reset your password.<br/>
           This code is valid for the next <strong>10 minutes</strong>.
         </p>
 
         <div class="otp-box">${otp}</div>
 
         <p class="info">
-          If you didn’t request a password reset, please ignore this email.
+          If you didn’t request a password reset, you can safely ignore this email.
         </p>
 
         <div class="footer">
@@ -97,14 +91,15 @@ export const sendOtpEmail = async (otp, email) => {
     </html>
     `;
 
-    const mailOptions = {
-      from: `"SwadBest Security" <${process.env.MAIL_USER}>`,
+    // Send using Resend
+    const result = await resend.emails.send({
+      from: "SwadBest Security <onboarding@resend.dev>",
       to: email,
       subject: "Your SwadBest Password Reset OTP",
       html: htmlTemplate,
-    };
+    });
 
-    const result = await transporter.sendMail(mailOptions);
+    console.log("OTP sent →", email);
     return result;
 
   } catch (err) {

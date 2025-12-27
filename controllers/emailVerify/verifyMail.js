@@ -1,4 +1,4 @@
-import nodemailer from "nodemailer";
+import { Resend } from "resend";
 import dotenv from "dotenv";
 dotenv.config();
 import fs from "fs";
@@ -9,51 +9,38 @@ import handlebars from "handlebars";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// FRONTEND VERIFICATION PAGE
 const FRONTEND_VERIFY_URL = process.env.FRONTEND_URL + "/verify";
 
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 export const verifyMail = async (token, email) => {
-    try {
-        // Load template
-        const templatePath = path.join(__dirname, "template.hbs");
-        const emailTemplateSource = fs.readFileSync(templatePath, "utf-8");
+  try {
+    // Load HTML template
+    const templatePath = path.join(__dirname, "template.hbs");
+    const emailTemplateSource = fs.readFileSync(templatePath, "utf-8");
+    const template = handlebars.compile(emailTemplateSource);
 
-        const template = handlebars.compile(emailTemplateSource);
+    // Build verification URL
+    const verifyLink = `${FRONTEND_VERIFY_URL}?token=${encodeURIComponent(token)}`;
 
-        // Build the correct verification link
-        const verifyUrl = `${FRONTEND_VERIFY_URL}?token=${encodeURIComponent(token)}`;
+    const htmlToSend = template({
+      verifyLink,
+      year: new Date().getFullYear(),
+    });
 
-        const htmlToSend = template({
-            verifyLink: verifyUrl,
-            year: new Date().getFullYear()
-        });
+    // Send email via Resend
+    await resend.emails.send({
+      from: "SwadBest <onboarding@resend.dev>",
+      to: email,
+      subject: "Verify Your Email",
+      html: htmlToSend,
+    });
 
+    console.log("Verification email sent →", email);
+    return true;
 
-        const transporter = nodemailer.createTransport({
-            host: "smtp.gmail.com",
-            port: 587,
-            secure: false,   // important
-            auth: {
-                user: process.env.MAIL_USER,
-                pass: process.env.MAIL_PASS,  // MUST be App Password
-            },
-        });
-
-
-        const mailOptions = {
-            from: `"SwadBest" <${process.env.MAIL_USER}>`,
-            to: email,
-            subject: "Verify Your Email",
-            html: htmlToSend,
-        };
-
-        await transporter.sendMail(mailOptions);
-
-        console.log("Verification email sent →", email);
-        return true;
-    } catch (err) {
-        console.error("verifyMail error:", err.message);
-        return false;
-    }
+  } catch (err) {
+    console.error("verifyMail error:", err.message);
+    return false;
+  }
 };

@@ -5,6 +5,10 @@ import { User } from "../models/userModel.js";
 import { Session } from "../models/sessionModel.js";
 import { verifyMail } from "./emailVerify/verifyMail.js";
 import { sendOtpEmail } from "./emailVerify/sendOtpMail.js";
+import { sendWelcomeEmail } from "./emailVerify/emailServices.js";
+import { sendLoginNotification } from "./emailVerify/emailServices.js";
+import { sendAccountDeletedEmail } from "./emailVerify/emailServices.js";
+import { sendPasswordChangedEmail } from "./emailVerify/emailServices.js";
 
 /* =====================================================
    HELPERS
@@ -72,6 +76,7 @@ export const verification = async (req, res) => {
     await user.save();
 
     return res.json({ success: true, message: "Email verified" });
+    await sendWelcomeEmail(user.email, user.name);
 
   } catch (err) {
     console.error("Verification error:", err);
@@ -121,6 +126,8 @@ export const loginUser = async (req, res) => {
         email: user.email,
       },
     });
+    await sendLoginNotification(user.email, ip, device);
+
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message });
   }
@@ -138,6 +145,7 @@ export const logoutUser = async (req, res) => {
     await User.findByIdAndUpdate(userId, { isLoggedIn: false });
 
     return res.json({ success: true, message: "Logged out" });
+    await sendAccountDeletedEmail(user.email, user.name);
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message });
   }
@@ -243,6 +251,7 @@ export const resetPassword = async (req, res) => {
 
     user.password = await bcrypt.hash(newPassword, 10);
     await user.save();
+    await sendPasswordChangedEmail(user.email, user.name );
 
     return res.json({
       success: true,
