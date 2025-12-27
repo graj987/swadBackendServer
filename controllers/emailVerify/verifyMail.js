@@ -11,7 +11,7 @@ const __dirname = path.dirname(__filename);
 
 // FRONTEND VERIFICATION PAGE
 const FRONTEND_VERIFY_URL = process.env.FRONTEND_URL + "/verify";
-// Example: https://your-app.com/verify-email
+
 
 export const verifyMail = async (token, email) => {
     try {
@@ -30,14 +30,16 @@ export const verifyMail = async (token, email) => {
         });
 
 
-        // Transporter
         const transporter = nodemailer.createTransport({
-            service: "gmail",
+            host: "smtp.gmail.com",
+            port: 587,
+            secure: false,   // important
             auth: {
                 user: process.env.MAIL_USER,
-                pass: process.env.MAIL_PASS,
+                pass: process.env.MAIL_PASS,  // MUST be App Password
             },
         });
+
 
         const mailOptions = {
             from: `"SwadBest" <${process.env.MAIL_USER}>`,
