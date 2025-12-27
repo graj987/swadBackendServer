@@ -49,24 +49,36 @@ export const registerUser = async (req, res) => {
 ===================================================== */
 export const verification = async (req, res) => {
   try {
-    const auth = req.headers.authorization;
-    if (!auth?.startsWith("Bearer "))
-      return res.status(401).json({ success: false, message: "Token missing" });
+    const token = req.query.token;
 
-    const token = auth.split(" ")[1];
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    if (!token) {
+      return res.status(400).json({ success: false, message: "Token missing" });
+    }
+
+    let decoded;
+    try {
+      decoded = jwt.verify(token, process.env.JWT_SECRET);
+    } catch (err) {
+      return res.status(401).json({ success: false, message: "Invalid or expired token" });
+    }
 
     const user = await User.findById(decoded.id);
-    if (!user)
+    if (!user) {
       return res.status(404).json({ success: false, message: "User not found" });
+    }
 
     user.isVerified = true;
     user.token = null;
     await user.save();
 
     return res.json({ success: true, message: "Email verified" });
-  } catch {
-    return res.status(401).json({ success: false, message: "Invalid or expired token" });
+
+  } catch (err) {
+    console.error("Verification error:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Server error"
+    });
   }
 };
 /* =====================================================

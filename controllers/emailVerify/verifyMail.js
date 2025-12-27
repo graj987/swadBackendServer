@@ -10,7 +10,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // FRONTEND VERIFICATION PAGE
-const FRONTEND_VERIFY_URL = process.env.FRONTEND_URL + "/verify-email";
+const FRONTEND_VERIFY_URL = process.env.FRONTEND_URL + "/verify";
 // Example: https://your-app.com/verify-email
 
 export const verifyMail = async (token, email) => {

@@ -29,7 +29,7 @@ router.post(
 );
 
 // Email verification (Bearer token)
-router.post("/verify", verification);
+router.get("/verify", verification);
 
 // Login / Logout
 router.post("/login", loginUser);

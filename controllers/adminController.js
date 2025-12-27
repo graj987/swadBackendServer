@@ -35,7 +35,7 @@ export const registerAdmin = async (req, res) => {
   try {
     const { name, email, password, adminSecret } = req.body;
 
-    // 🔒 Protect admin creation
+    // 1. Validate admin secret
     if (adminSecret !== process.env.ADMIN_SECRET) {
       return res.status(403).json({
         success: false,
@@ -43,6 +43,7 @@ export const registerAdmin = async (req, res) => {
       });
     }
 
+    // 2. Basic validation
     if (!name || !email || !password) {
       return res.status(400).json({
         success: false,
@@ -57,6 +58,7 @@ export const registerAdmin = async (req, res) => {
       });
     }
 
+    // 3. Check if admin exists
     const adminExists = await Admin.findOne({ email });
     if (adminExists) {
       return res.status(409).json({
@@ -65,8 +67,18 @@ export const registerAdmin = async (req, res) => {
       });
     }
 
-    const admin = await Admin.create({ name, email, password });
+    // 4. Hash password
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
 
+    // 5. Create admin
+    const admin = await Admin.create({
+      name,
+      email,
+      password: hashedPassword,
+    });
+
+    // 6. Respond
     return res.status(201).json({
       success: true,
       admin: {
@@ -76,13 +88,17 @@ export const registerAdmin = async (req, res) => {
       },
       token: generateToken(admin._id),
     });
+
   } catch (err) {
+    console.error("Admin registration error:", err);
     return res.status(500).json({
       success: false,
       message: "Server error",
     });
   }
 };
+
+
 export const loginAdmin = async (req, res) => {
   try {
     const { email, password } = req.body;
