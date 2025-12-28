@@ -2,84 +2,64 @@ import Admin from "../models/admin.js";
 import jwt from "jsonwebtoken";
 import Product from "../models/productModel.js";
 import Order from "../models/order.js";
-import {User} from "../models/userModel.js";
-import bcrypt from "bcryptjs";
-import { createHash } from "crypto";
+import { User } from "../models/userModel.js";
 import cloudinary from "cloudinary";
 import streamifier from "streamifier";
-import dotenv from "dotenv";
-dotenv.config();
 
-// Generate JWT Token
+// --------------------------------------------------------
+// CLOUDINARY CONFIG
+// --------------------------------------------------------
+cloudinary.v2.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
+
+// Upload file buffer to cloudinary
+const uploadBufferToCloudinary = (buffer, folder = "products") =>
+  new Promise((resolve, reject) => {
+    const uploadStream = cloudinary.v2.uploader.upload_stream(
+      { folder },
+      (err, result) => {
+        if (err) return reject(err);
+        resolve(result);
+      }
+    );
+    streamifier.createReadStream(buffer).pipe(uploadStream);
+  });
+
+// --------------------------------------------------------
+// TOKEN GENERATION
+// --------------------------------------------------------
 const generateToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET, {
     expiresIn: "30d",
   });
 };
 
-cloudinary.v2.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-});
-const uploadBufferToCloudinary = (buffer, folder = "products") =>
-  new Promise((resolve, reject) => {
-    const uploadStream = cloudinary.v2.uploader.upload_stream({ folder }, (err, result) => {
-      if (err) return reject(err);
-      resolve(result);
-    });
-    streamifier.createReadStream(buffer).pipe(uploadStream);
-  });
+// --------------------------------------------------------
+// ADMIN AUTH
+// --------------------------------------------------------
 
+// Register admin
 export const registerAdmin = async (req, res) => {
   try {
-    const { name, email, password, adminSecret } = req.body;
+    const { name, email, password } = req.body;
 
-    // 1. Validate admin secret
-    if (adminSecret !== process.env.ADMIN_SECRET) {
-      return res.status(403).json({
-        success: false,
-        message: "Unauthorized admin registration",
-      });
-    }
+    if (!name || !email || !password)
+      return res
+        .status(400)
+        .json({ success: false, message: "All fields are required" });
 
-    // 2. Basic validation
-    if (!name || !email || !password) {
-      return res.status(400).json({
-        success: false,
-        message: "All fields are required",
-      });
-    }
-
-    if (password.length < 8) {
-      return res.status(400).json({
-        success: false,
-        message: "Password must be at least 8 characters",
-      });
-    }
-
-    // 3. Check if admin exists
     const adminExists = await Admin.findOne({ email });
-    if (adminExists) {
-      return res.status(409).json({
-        success: false,
-        message: "Admin already exists",
-      });
-    }
+    if (adminExists)
+      return res
+        .status(409)
+        .json({ success: false, message: "Admin already exists" });
 
-    // 4. Hash password
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
+    const admin = await Admin.create({ name, email, password });
 
-    // 5. Create admin
-    const admin = await Admin.create({
-      name,
-      email,
-      password: hashedPassword,
-    });
-
-    // 6. Respond
-    return res.status(201).json({
+    res.status(201).json({
       success: true,
       admin: {
         _id: admin._id,
@@ -88,121 +68,103 @@ export const registerAdmin = async (req, res) => {
       },
       token: generateToken(admin._id),
     });
-
   } catch (err) {
-    console.error("Admin registration error:", err);
-    return res.status(500).json({
-      success: false,
-      message: "Server error",
-    });
+    console.error("Register error:", err);
+    res.status(500).json({ success: false, message: "Server error" });
   }
 };
 
-
+// Login admin
 export const loginAdmin = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    let { email, password } = req.body;
+    email = email?.trim().toLowerCase();
 
-    if (!email || !password) {
-      return res.status(400).json({
-        success: false,
-        message: "Email and password are required",
-      });
-    }
+    if (!email || !password)
+      return res
+        .status(400)
+        .json({ success: false, message: "Email and password required" });
 
     const admin = await Admin.findOne({ email });
-    if (!admin) {
-      return res.status(401).json({
-        success: false,
-        message: "Invalid email or password",
-      });
-    }
+    if (!admin)
+      return res
+        .status(401)
+        .json({ success: false, message: "Invalid email or password" });
 
     const isMatch = await admin.matchPassword(password);
-    if (!isMatch) {
-      return res.status(401).json({
-        success: false,
-        message: "Invalid email or password",
-      });
-    }
+    if (!isMatch)
+      return res
+        .status(401)
+        .json({ success: false, message: "Invalid email or password" });
 
-    return res.json({
+    res.json({
       success: true,
-      admin: {
-        _id: admin._id,
-        name: admin.name,
-        email: admin.email,
-      },
+      admin: { _id: admin._id, name: admin.name, email: admin.email },
       token: generateToken(admin._id),
     });
   } catch (err) {
-    return res.status(500).json({
-      success: false,
-      message: "Server error",
-    });
-  }
-};
-
-// @desc Get all orders (Admin only)
-export const getAllOrders = async (req, res) => {
-  try {
-    const orders = await Order.find().populate("user", "name email");
-    res.json(orders);
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-};
-
-export const getAllUsers = async (req, res) => {
-  try {
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 25;
-    const skip = (page - 1) * limit;
-
-    const users = await User.find()
-      .select("-password")
-      .skip(skip)
-      .limit(limit)
-      .sort({ createdAt: -1 }); // newest first
-
-    const total = await User.countDocuments();
-
-    res.json({
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-      users
-    });
-
-  } catch (err) {
-    console.error("getAllUsers error:", err);
+    console.error("Login error:", err);
     res.status(500).json({ message: "Server error" });
   }
 };
 
-
-// @desc Add new product (Admin only)
-export const addProduct = async (req, res) => {
+// Verify admin token
+export const verifyAdmin = async (req, res) => {
   try {
-    const { name, description, price, image, category } = req.body;
+    const token = req.headers.authorization?.split(" ")[1];
+    if (!token) return res.status(401).json({ message: "Token missing" });
 
-    const product = new Product({
-      name,
-      description,
-      price,
-      image,
-      category,
-    });
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-    const createdProduct = await product.save();
-    res.status(201).json(createdProduct);
+    const admin = await Admin.findById(decoded.id).select("-password");
+    if (!admin) return res.status(404).json({ message: "Admin not found" });
+
+    res.json({ admin });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    console.error("verifyAdmin error:", err);
+    res.status(401).json({ message: "Invalid token" });
   }
 };
 
-// @desc Delete product (Admin only)
+// --------------------------------------------------------
+// PRODUCT MANAGEMENT
+// --------------------------------------------------------
+
+export const addProduct = async (req, res) => {
+  try {
+    const { name, description, price, category, stock } = req.body;
+
+    if (!name || !description || !price || !stock)
+      return res.status(400).json({
+        success: false,
+        message: "Name, description, price and stock are required",
+      });
+
+    if (!req.file)
+      return res
+        .status(400)
+        .json({ success: false, message: "Product image required" });
+
+    // Upload image to Cloudinary
+    const uploadResult = await uploadBufferToCloudinary(req.file.buffer);
+
+    const product = await Product.create({
+      name,
+      description,
+      price,
+      category,
+      stock,
+      image: uploadResult.secure_url,
+    });
+
+    res.status(201).json({ success: true, product });
+  } catch (err) {
+    console.error("Add product error:", err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// Delete product
 export const deleteProduct = async (req, res) => {
   try {
     const product = await Product.findById(req.params.id);
@@ -210,102 +172,195 @@ export const deleteProduct = async (req, res) => {
       return res.status(404).json({ message: "Product not found" });
 
     await product.deleteOne();
-    res.json({ message: "Product deleted successfully" });
+    res.json({ success: true, message: "Product deleted" });
   } catch (err) {
+    console.error("Delete product error:", err);
     res.status(500).json({ message: err.message });
   }
 };
+
+// Get all products
+export const getProducts = async (req, res) => {
+  try {
+    const products = await Product.find().sort({ createdAt: -1 });
+    res.json(products);
+  } catch (err) {
+    console.error("getProducts error:", err);
+    res.status(500).json({ message: "Failed to fetch products" });
+  }
+};
+
+export const getProductById = async (req, res) => {
+  try {
+    const product = await Product.findById(req.params.id);
+    if (!product) return res.status(404).json({ message: "Product not found" });
+
+    res.json(product);
+  } catch (err) {
+    console.error("getProductById error:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+
+
+export const updateProduct = async (req, res) => {
+  try {
+    const { name, description, price, category, stock, image } = req.body;
+
+    const product = await Product.findById(req.params.id);
+    if (!product) return res.status(404).json({ message: "Product not found" });
+
+    product.name = name || product.name;
+    product.description = description || product.description;
+    product.price = price || product.price;
+    product.category = category || product.category;
+    product.stock = stock ?? product.stock;
+    product.image = image || product.image;
+
+    await product.save();
+
+    res.json({ success: true, product });
+  } catch (err) {
+    console.error("updateProduct error:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+// --------------------------------------------------------
+// ORDERS
+// --------------------------------------------------------
+
+export const getAllOrders = async (req, res) => {
+  try {
+    const orders = await Order.find().populate("user", "name email");
+    res.json(orders);
+  } catch (err) {
+    console.error("getAllOrders error:", err);
+    res.status(500).json({ message: "Failed to fetch orders" });
+  }
+};
+
+export const getOrdersCount = async (req, res) => {
+  try {
+    const count = await Order.countDocuments();
+    res.json({ count });
+  } catch (err) {
+    console.error("getOrdersCount error:", err);
+    res.status(500).json({ message: "Failed to fetch orders count" });
+  }
+};
+
+export const updateOrderStatus = async (req, res) => {
+  try {
+    const orderId = req.params.id;
+    const { status } = req.body;
+
+    if (!status) {
+      return res.status(400).json({ message: "Status is required" });
+    }
+
+    const order = await Order.findById(orderId);
+    if (!order) {
+      return res.status(404).json({ message: "Order not found" });
+    }
+
+    order.orderStatus = status;
+    await order.save();
+
+    return res.json({
+      success: true,
+      message: "Order status updated",
+      order,
+    });
+  } catch (err) {
+    console.error("Order status update error:", err);
+    res.status(500).json({ message: "Server Error" });
+  }
+};
+
+// --------------------------------------------------------
+// USERS
+// --------------------------------------------------------
+
+export const getAllUsers = async (req, res) => {
+  try {
+    const users = await User.find().select("-password");
+    res.json(users);
+  } catch (err) {
+    console.error("getAllUsers error:", err);
+    res.status(500).json({ message: "Failed to fetch users" });
+  }
+};
+
+export const usersCount = async (req, res) => {
+  try {
+    const count = await User.countDocuments();
+    res.json({ count });
+  } catch (err) {
+    console.error("usersCount error:", err);
+    res.status(500).json({ message: "Failed to fetch users count" });
+  }
+};
+
+// --------------------------------------------------------
+// STATS
+// --------------------------------------------------------
 
 export const getStats = async (req, res) => {
   try {
     const [usersCount, productsCount, ordersCount] = await Promise.all([
       User.countDocuments(),
       Product.countDocuments(),
-      Order.countDocuments()
+      Order.countDocuments(),
     ]);
-    return res.json({ usersCount, productsCount, ordersCount });
+
+    res.json({ usersCount, productsCount, ordersCount });
   } catch (err) {
     console.error("getStats error:", err);
-    return res.status(500).json({ message: "Failed to fetch stats", error: err.message });
-  }
-};
-export const usersCount = async (req,res) => {
-  try {
-    const count = await User.countDocuments();
-    res.json({ count });
-  }
-  catch (err) {
-    console.error("usersCount:", err);
-    res.status(500).json({ message: "Failed to fetch users count", error: err.message });
-  }
-};
-export const getProducts = async (req, res) => {
-  try {
-    const products = await Product.find();
-    res.json(products);
-  } catch (err) {
-    console.error("getProducts error:", err);
-    res.status(500).json({ message: "Failed to fetch products", error: err.message });
-  }
-};
-export const getOrdersCount = async (req,res) => {
-  try {
-    const count = await Order.countDocuments();
-    res.json({ count });
-  }
-  catch (err) {
-    console.error("getOrdersCount:", err);
-    res.status(500).json({ message: "Failed to fetch orders count", error: err.message });
+    res.status(500).json({ message: "Failed to fetch stats" });
   }
 };
 
-export const getProductsCount = async (req,res) => {
+// --------------------------------------------------------
+// EXTRA — PRODUCTS COUNT
+// --------------------------------------------------------
+
+export const getProductsCount = async (req, res) => {
   try {
     const count = await Product.countDocuments();
     res.json({ count });
-  }
-  catch (err) {
-    console.error("getProductsCount:", err);
-    res.status(500).json({ message: "Failed to fetch products count", error: err.message });
-  }
-};  
-export const verifyAdmin = async (req, res) => {
-  try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader) return res.status(401).json({ message: "No token provided." });
-
-    const token = authHeader.split(" ")[1];
-    if (!token) return res.status(401).json({ message: "Token missing." });
-
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-
-    const admin = await Admin.findById(decoded.id).select("-password");
-    if (!admin) return res.status(404).json({ message: "Admin not found." });
-
-    res.json({ admin });
   } catch (err) {
-    console.log(err);
-    return res.status(401).json({ message: "Invalid or expired token." });
+    console.error("getProductsCount error:", err);
+    res.status(500).json({ message: "Failed to fetch products count" });
   }
 };
 
-
+// --------------------------------------------------------
+// IMAGE UPLOAD (Cloudinary)
+// --------------------------------------------------------
 
 export const uploadImage = async (req, res) => {
   try {
-    // multer will place file in req.file
-    if (!req.file) return res.status(400).json({ message: "No file provided" });
+    if (!req.file)
+      return res.status(400).json({ message: "No file provided" });
 
     const folder = req.body?.folder || "products";
-    const result = await uploadBufferToCloudinary(req.file.buffer, folder);
 
-    return res.json({
+    const result = await uploadBufferToCloudinary(
+      req.file.buffer,
+      folder
+    );
+
+    res.json({
       secure_url: result.secure_url,
       public_id: result.public_id,
-      raw: result,
     });
   } catch (err) {
     console.error("uploadImage error:", err);
-    return res.status(500).json({ message: "Upload failed", error: err.message || String(err) });
+    res.status(500).json({
+      message: "Upload failed",
+      error: err.message || String(err),
+    });
   }
 };

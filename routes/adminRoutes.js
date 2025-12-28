@@ -1,43 +1,82 @@
 import express from "express";
 import multer from "multer";
+
 import {
   registerAdmin,
   loginAdmin,
   getAllOrders,
+  getAllUsers,
   addProduct,
   deleteProduct,
-  getAllUsers,
-  getStats,
-  usersCount,
   getProducts,
-  getProductsCount,
-  getOrdersCount,
   verifyAdmin,
   uploadImage,
+  getStats,
+  usersCount,
+  getProductsCount,
+  getOrdersCount,
+  getProductById,
+  updateProduct,
+  updateOrderStatus,
 } from "../controllers/adminController.js";
+
 import { protectAdmin } from "../middleware/adminMiddleware.js";
-import { protectSign } from "../middleware/signProtectMiddleware.js";
 
 const router = express.Router();
-const upload = multer();
 
-// Public routes (you can disable register later)
+// ------------------- MULTER (Memory Storage for Cloudinary) -------------------
+const upload = multer({
+  storage: multer.memoryStorage(),     // required for cloudinary upload_stream
+  limits: { fileSize: 2 * 1024 * 1024 } // 2MB limit
+});
+
+// ------------------- PUBLIC ROUTES -------------------
 router.post("/register", registerAdmin);
 router.post("/login", loginAdmin);
 
-// Protected routes
+// ------------------- PROTECTED ADMIN ROUTES -------------------
+router.get("/verify", protectAdmin, verifyAdmin);
+
+// Orders
 router.get("/orders", protectAdmin, getAllOrders);
 router.get("/orders/count", protectAdmin, getOrdersCount);
-router.get("/stats", protectAdmin, getStats);  
+
+// Users
 router.get("/users", protectAdmin, getAllUsers);
 router.get("/users/count", protectAdmin, usersCount);
 
-router.post("/product", protectAdmin, addProduct);
-router.delete("/product/:id", protectAdmin, deleteProduct);
-router.get("/product", protectAdmin, getProducts);
-router.get("/products/count", protectAdmin, getProductsCount);
+// Stats
+router.get("/stats", protectAdmin, getStats);
 
-router.get("/verify", verifyAdmin);
-router.post("/upload", protectSign, upload.single("file"), uploadImage);
+// ------------------- PRODUCTS -------------------
+router.get("/products", protectAdmin, getProducts);
+router.get("/products/count", protectAdmin, getProductsCount);
+router.get("/products/:id", protectAdmin, getProductById);
+router.put("/products/:id", protectAdmin, updateProduct);
+
+
+router.post(
+  "/products",
+  protectAdmin,
+  upload.single("image"),   // REQUIRED, matches fd.append("image")
+  addProduct
+);
+
+router.delete("/products/:id", protectAdmin, deleteProduct);
+
+// ------------------- CLOUDINARY IMAGE UPLOAD -------------------
+router.post(
+  "/upload",
+  protectAdmin,
+  upload.single("image"), // MUST match the field name
+  uploadImage
+);
+
+router.put(
+  "/orders/:id/status",
+  protectAdmin,
+  updateOrderStatus
+);
+
 
 export default router;
