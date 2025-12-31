@@ -1,139 +1,187 @@
-// backend/models/Payment.js
-import mongoose from 'mongoose';
+import mongoose from "mongoose";
 
-const RefundSchema = new mongoose.Schema({
-  refund_id: { type: String },
-  amount_paise: { type: Number },
-  status: { type: String },
-  created_at: { type: Date, default: Date.now },
-}, { _id: false });
+/* ----------------------- REFUND SUB-SCHEMA ------------------------ */
+const RefundSchema = new mongoose.Schema(
+  {
+    refund_id: String,
+    amount_paise: Number,
+    status: String,
+    created_at: { type: Date, default: Date.now },
+  },
+  { _id: false }
+);
 
-const CardSchema = new mongoose.Schema({
-  network: { type: String },      // e.g., VISA, MASTERCARD
-  brand: { type: String },        // e.g., 'Visa'
-  last4: { type: String },        // last 4 digits if available
-  issuer: { type: String },       // bank / issuer name
-  country: { type: String },      // issuer country code e.g. 'IN'
-}, { _id: false });
+/* ----------------------- CARD SUB-SCHEMA -------------------------- */
+const CardSchema = new mongoose.Schema(
+  {
+    network: String,
+    brand: String,
+    last4: String,
+    issuer: String,
+    country: String,
+  },
+  { _id: false }
+);
 
-const PaymentSchema = new mongoose.Schema({
-  // Primary Razorpay identifiers
-  razorpay_payment_id: { type: String, required: true, unique: true, index: true },
-  razorpay_order_id: { type: String, index: true },
+/* ----------------------- MAIN PAYMENT SCHEMA ---------------------- */
+const PaymentSchema = new mongoose.Schema(
+  {
+    razorpay_payment_id: {
+      type: String,
+      required: true,
+      unique: true,
+      index: true,
+    },
 
-  // References
-  order: { type: mongoose.Schema.Types.ObjectId, ref: 'Order', required: false },
-  user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: false },
+    razorpay_order_id: { type: String, index: true },
 
-  // Monetary fields
-  amount_paise: { type: Number, required: true },   // always store paise (integer)
-  currency: { type: String, default: 'INR' },
+    /* ----- Relations ----- */
+    order: { type: mongoose.Schema.Types.ObjectId, ref: "Order", default: null },
+    user: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
 
-  // Payment method & status
-  method: { type: String }, // e.g., "card", "upi", "netbanking", "wallet"
-  status: { type: String, enum: ['created','authorized','captured','failed','refunded','refund_processing'], default: 'created' },
+    /* ----- Money ----- */
+    amount_paise: { type: Number, required: true }, // stored in paise
+    currency: { type: String, default: "INR" },
 
-  // Card / UPI / Bank specific info
-  card: { type: CardSchema, default: null },
-  vpa: { type: String, default: null },     // for UPI (user@bank)
-  bank: { type: String, default: null },    // bank name if available
-  acquirer_data: { type: mongoose.Schema.Types.Mixed, default: null },
+    /* ----- Status ----- */
+    method: String, // card/upi/netbanking/wallet
+    status: {
+      type: String,
+      enum: [
+        "created",
+        "authorized",
+        "captured",
+        "failed",
+        "refunded",
+        "refund_processing",
+      ],
+      default: "created",
+    },
 
-  // Raw payload from Razorpay (store for audits)
-  raw: { type: mongoose.Schema.Types.Mixed, default: {} },
+    /* ----- Method extra info ----- */
+    card: { type: CardSchema, default: null },
+    vpa: String,
+    bank: String,
 
-  // Refunds history (array to track partial / multiple refunds)
-  refunds: { type: [RefundSchema], default: [] },
+    /* ----- Razorpay raw payload ----- */
+    raw: { type: mongoose.Schema.Types.Mixed, default: {} },
 
-  // Verification & security
-  signature_verified: { type: Boolean, default: false },
-  verification_notes: { type: String, default: null },
+    /* ----- Refund tracking ----- */
+    refunds: { type: [RefundSchema], default: [] },
 
-  // Audit / anti-fraud signals
-  ip: { type: String, default: null },
-  userAgent: { type: String, default: null },
-  attempts: { type: Number, default: 0 },
+    /* ----- Security & verification ----- */
+    signature_verified: { type: Boolean, default: false },
+    verification_notes: String,
+    ip: String,
+    userAgent: String,
 
-  // Arbitrary metadata
-  meta: { type: mongoose.Schema.Types.Mixed, default: {} },
+    /* ----- Razorpay timestamps ----- */
+    created_at_unix: Number,
+    captured_at_unix: Number,
 
-}, { timestamps: true });
+    /* ----- Notes (Razorpay supports this) ----- */
+    notes: { type: mongoose.Schema.Types.Mixed, default: {} },
 
-// Static helper: create or update payment from a Razorpay payment object (webhook or API)
-PaymentSchema.statics.createOrUpdateFromRazorpay = async function(razorpayPaymentObj, opts = {}) {
-  /**
-   * razorpayPaymentObj: full payment object returned by Razorpay (webhook.payload.payment.entity or GET /payments/:id)
-   * opts: { orderRef: ObjectId, userRef: ObjectId, signatureVerified: Boolean, ip, userAgent }
-   */
-  const Payment = this;
-  const p = razorpayPaymentObj;
+    /* ----- Metadata ----- */
+    meta: { type: mongoose.Schema.Types.Mixed, default: {} },
+  },
+  { timestamps: true }
+);
 
-  if (!p || !p.id) throw new Error('Invalid razorpay payment object');
+/* ================================================================
+   STATIC: Create or Update Payment from Razorpay Object
+================================================================ */
+PaymentSchema.statics.createOrUpdateFromRazorpay = async function (
+  p,
+  opts = {}
+) {
+  if (!p || !p.id) throw new Error("Invalid Razorpay payment object");
 
   const doc = {
     razorpay_payment_id: p.id,
     razorpay_order_id: p.order_id || null,
-    amount_paise: p.amount || 0,
-    currency: p.currency || 'INR',
-    method: p.method || null,
-    status: p.status || null,
+
+    amount_paise: p.amount,
+    currency: p.currency,
+
+    method: p.method,
+    status: p.status,
+
     raw: p,
+
     signature_verified: !!opts.signatureVerified,
     verification_notes: opts.verificationNotes || null,
+
     ip: opts.ip || null,
     userAgent: opts.userAgent || null,
-    meta: opts.meta || {}
+
+    notes: p.notes || {},
+
+    created_at_unix: p.created_at || null,
+    captured_at_unix: p.captured_at || null,
   };
 
-  // card details
-  if (p.card) {
+  /* ------- Save card info ------- */
+  if (p.method === "card" && p.card) {
     doc.card = {
-      network: p.card.network || null,
-      brand: p.card.brand || null,
-      last4: p.card.last4 || null,
-      issuer: p.card.issuer || null,
-      country: p.card.country || null
+      network: p.card.network,
+      brand: p.card.brand,
+      last4: p.card.last4,
+      issuer: p.card.issuer,
+      country: p.card.country,
     };
   }
 
+  /* ------- Save UPI info ------- */
   if (p.vpa) doc.vpa = p.vpa;
-  if (p.bank) doc.bank = p.bank;
-  if (p.acquirer_data) doc.acquirer_data = p.acquirer_data;
 
-  // handle refunds array if present
-  if (p.refunds && Array.isArray(p.refunds) && p.refunds.length > 0) {
-    doc.refunds = (p.refunds || []).map(r => ({
-      refund_id: r.id || null,
-      amount_paise: r.amount || 0,
-      status: r.status || null,
-      created_at: r.created_at ? new Date(r.created_at * 1000) : new Date()
+  /* ------- Save bank info ------- */
+  if (p.bank) doc.bank = p.bank;
+
+  /* ------- Refund arrays (if Razorpay sent) ------- */
+  if (Array.isArray(p.refunds?.items)) {
+    doc.refunds = p.refunds.items.map((r) => ({
+      refund_id: r.id,
+      amount_paise: r.amount,
+      status: r.status,
+      created_at: r.created_at
+        ? new Date(r.created_at * 1000)
+        : new Date(),
     }));
   }
 
+  /* ------- Link order/user if available ------- */
   if (opts.orderRef) doc.order = opts.orderRef;
   if (opts.userRef) doc.user = opts.userRef;
 
-  // upsert by razorpay_payment_id
-  const updated = await Payment.findOneAndUpdate(
+  /* ------- Upsert Payment ------- */
+  const updated = await this.findOneAndUpdate(
     { razorpay_payment_id: p.id },
-    { $set: doc, $inc: { attempts: 1 } },
+    { $set: doc },
     { upsert: true, new: true, setDefaultsOnInsert: true }
-  ).exec();
+  );
 
   return updated;
 };
 
-// Instance method: add a refund record
-PaymentSchema.methods.addRefund = async function(refundObj = {}) {
+/* ================================================================
+   METHOD: Add single refund
+================================================================ */
+PaymentSchema.methods.addRefund = async function (r = {}) {
   this.refunds.push({
-    refund_id: refundObj.id || refundObj.refund_id || null,
-    amount_paise: refundObj.amount || refundObj.amount_paise || 0,
-    status: refundObj.status || 'unknown',
-    created_at: refundObj.created_at ? new Date(refundObj.created_at * 1000) : new Date()
+    refund_id: r.id || r.refund_id,
+    amount_paise: r.amount || r.amount_paise || 0,
+    status: r.status || "unknown",
+    created_at: r.created_at
+      ? new Date(r.created_at * 1000)
+      : new Date(),
   });
-  // update status if fully refunded or partial logic (consumer can adjust)
-  this.status = refundObj.status === 'processed' || refundObj.status === 'completed' ? 'refunded' : this.status;
+
+  if (r.status === "processed" || r.status === "completed") {
+    this.status = "refunded";
+  }
+
   return this.save();
 };
 
-export default mongoose.model('Payment', PaymentSchema);
+export default mongoose.model("Payment", PaymentSchema);

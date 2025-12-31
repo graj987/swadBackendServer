@@ -5,7 +5,7 @@ import crypto from "crypto";
 import dotenv from "dotenv";
 
 import Order from "../models/order.js";
-import Payment from "../models/Payment.js";
+import Payment from "../models/payment.js";
 
 dotenv.config();
 
