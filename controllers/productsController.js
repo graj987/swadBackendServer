@@ -10,6 +10,16 @@ export const getProducts = async (req, res) => {
   }
 };
 
+export const featuredProducts = async (req, res) => {
+  try {
+    const products = await Product.find({ featured: true });
+    res.json(products);
+  } catch (error) {
+    res.status(500).json({ message: "Error fetching featured products" });
+  } 
+};
+
+
 export const getProductById = async (req, res) => {
   try {
     const product = await Product.findById(req.params.id);
@@ -21,31 +31,6 @@ export const getProductById = async (req, res) => {
   }
 };
 
-export const addProduct = async (req, res) => {
-  try {
-    const { name, price, category } = req.body;
-
-    if (!name || !price || !req.file) {
-      return res.status(400).json({ message: "Missing required fields" });
-    }
-
-    const uploadRes = await cloudinary.uploader.upload(req.file.path, {
-      folder: "products",
-    });
-
-    const product = await Product.create({
-      name,
-      price,
-      category,
-      image: uploadRes.secure_url,
-    });
-
-    res.status(201).json(product);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Product upload failed" });
-  }
-};
 
 export const getProductsCount = async (req, res) => {
   try {
@@ -54,5 +39,29 @@ export const getProductsCount = async (req, res) => {
   } catch (err) {
     console.error("getProductsCount:", err);
     res.status(500).json({ message: "Failed to fetch products count", error: err.message });
+  }
+};
+
+export const searchProducts = async (req, res) => {
+  try {
+    const query = req.query.query;
+
+    if (!query || query.trim() === "") {
+      return res.json([]);
+    }
+
+    const results = await Product.find(
+      {
+        name: { $regex: query, $options: "i" }
+      },
+      "name image price _id category"
+    )
+      .limit(10)
+      .lean();
+
+    res.json(results);
+  } catch (err) {
+    console.error("Search error:", err);
+    res.status(500).json({ error: "Search failed" });
   }
 };

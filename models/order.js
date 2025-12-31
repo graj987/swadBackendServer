@@ -57,7 +57,14 @@ const orderSchema = new mongoose.Schema({
     enum: ["preparing", "shipped", "delivered", "cancelled"],
     default: "preparing",
   },
+   
+  shiprocketOrderId: { type: String, default: null },
+  awb: { type: String, default: null },
+  shipmentId: { type: String, default: null },
+  trackingUrl: { type: String, default: null },
+
 }, { timestamps: true });
 
+ 
 
 export default mongoose.model("Order", orderSchema);

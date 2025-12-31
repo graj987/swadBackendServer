@@ -206,7 +206,7 @@ export const getProductById = async (req, res) => {
 
 export const updateProduct = async (req, res) => {
   try {
-    const { name, description, price, category, stock, image } = req.body;
+    const { name, description, price, category, stock, image, featured } = req.body;
 
     const product = await Product.findById(req.params.id);
     if (!product) return res.status(404).json({ message: "Product not found" });
@@ -217,6 +217,7 @@ export const updateProduct = async (req, res) => {
     product.category = category || product.category;
     product.stock = stock ?? product.stock;
     product.image = image || product.image;
+    product.featured = featured ?? product.featured;
 
     await product.save();
 

@@ -10,6 +10,7 @@ import orderRoutes from "./routes/orderRoutes.js";
 import usersRoutes from "./routes/usersRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
 import paymentRoutes from "./routes/paymentRoutes.js";
+import shiprocketRoutes from "./routes/shiprocketRoutes.js";
 
 connectDB();
 
@@ -30,7 +31,7 @@ app.use("/api/products", productRoutes);    // Products
 app.use("/api/orders", orderRoutes);        // Orders
 app.use("/api/admin", adminRoutes);         // Admin operations
 app.use("/api/payments", paymentRoutes);    // Payment gateway routes
-
+app.use("/api/shiprocket", shiprocketRoutes);
 // Global error handler (optional but recommended)
 app.use((err, req, res, next) => {
   console.error("Global Error:", err);

@@ -21,13 +21,13 @@ const productSchema = new mongoose.Schema(
       required: [true, "Product price is required"],
     },
     image: {
-      type: String, // URL to your uploaded image (Render/Cloudinary/local)
+      type: String,
       default: "",
     },
     stock: {
       type: Number,
       required: true,
-      min:0,// you can increase as you scale up
+      min: 0,
     },
     isAvailable: {
       type: Boolean,
@@ -41,9 +41,18 @@ const productSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    featured: {
+      type: Boolean,
+      default: false,
+    },
   },
   { timestamps: true }
 );
+
+/* ---------------------------------------------
+   🔥 ADD TEXT INDEX HERE — THIS IS THE CORRECT SPOT
+---------------------------------------------- */
+productSchema.index({ name: "text", category: "text" });
 
 const Product = mongoose.model("Product", productSchema);
 export default Product;
