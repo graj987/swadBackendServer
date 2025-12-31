@@ -11,7 +11,10 @@ import usersRoutes from "./routes/usersRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
 import paymentRoutes from "./routes/paymentRoutes.js";
 import shiprocketRoutes from "./routes/shiprocketRoutes.js";
-
+import otpRoutes from "./routes/otpRoutes.js";
+import pincodeRoutes from "./routes/pincodeRoutes.js";
+import codRoutes from "./routes/codRoutes.js";
+import adminOrderRoutes from "./routes/adminOrderRoutes.js";
 connectDB();
 
 const app = express();
@@ -32,6 +35,11 @@ app.use("/api/orders", orderRoutes);        // Orders
 app.use("/api/admin", adminRoutes);         // Admin operations
 app.use("/api/payments", paymentRoutes);    // Payment gateway routes
 app.use("/api/shiprocket", shiprocketRoutes);
+app.use("/api/otp", otpRoutes);
+app.use("/api/pincode", pincodeRoutes);
+app.use("/api/cod", codRoutes);
+app.use("/api/admin/orders", adminOrderRoutes);        // Orders
+
 // Global error handler (optional but recommended)
 app.use((err, req, res, next) => {
   console.error("Global Error:", err);

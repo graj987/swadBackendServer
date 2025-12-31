@@ -9,6 +9,9 @@ const userSchema = new mongoose.Schema({
   token: { type: String, default: null },
   otp: { type: String, default: null },
   otpExpiry: { type: Date, default: null },
+  codEligible: { type: Boolean, default: false }, // new users = false
+rtoCount: { type: Number, default: 0 },         // returned orders
+trustScore: { type: Number, default: 0 }, 
 
 },{timestamps:true});
 

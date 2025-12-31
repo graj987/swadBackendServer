@@ -2,8 +2,8 @@
 import mongoose from "mongoose";
 import Product from "../models/productModel.js";
 import Order from "../models/order.js";
-
-
+import { calculateDeliveryCharge } from "../utils/deliveryCharge.js";
+import axios from "axios";
 /* ---------------- PRODUCTS ---------------- */
 
 export const getProducts = async (req, res) => {
@@ -49,13 +49,15 @@ export const addProduct = async (req, res) => {
 
 
 
+
+
 export const createOrder = async (req, res) => {
   const session = await mongoose.startSession();
 
   try {
     session.startTransaction();
 
-    const { products, address } = req.body;
+    const { products, address, paymentMethod } = req.body;
     const userId = req.userId;
 
     if (!userId) {
@@ -66,25 +68,44 @@ export const createOrder = async (req, res) => {
       return res.status(400).json({ success: false, message: "Invalid order data" });
     }
 
-    const productIds = products.map(p => p.product);
+    // --------------------------------------------------
+    // 1️⃣ COD FRAUD PROTECTION — Backend Level Check
+    // --------------------------------------------------
+    if (paymentMethod === "COD") {
+      const codCheck = await axios.get(
+        `${process.env.BASE_URL}/api/cod/check`,
+        { headers: { Authorization: req.headers.authorization } }
+      );
+
+      if (!codCheck.data.codAllowed) {
+        throw { status: 403, message: codCheck.data.message };
+      }
+    }
+
+    // --------------------------------------------------
+    // 2️⃣ FETCH PRODUCTS
+    // --------------------------------------------------
+    const productIds = products.map((p) => p.product);
     const dbProducts = await Product.find({ _id: { $in: productIds } }).session(session);
 
-    let totalAmount = 0;
+    let subtotal = 0;
     const orderProducts = [];
 
+    // --------------------------------------------------
+    // 3️⃣ VALIDATE PRODUCTS + CHECK STOCK
+    // --------------------------------------------------
     for (const item of products) {
-      const dbProduct = dbProducts.find(p => p._id.toString() === item.product);
-      if (!dbProduct) {
-        throw { status: 400, message: "Invalid product in cart" };
-      }
+      const dbProduct = dbProducts.find((p) => p._id.toString() === item.product);
+
+      if (!dbProduct) throw { status: 400, message: "Invalid product in cart" };
 
       const qty = Math.max(1, Number(item.quantity || 1));
 
       if (dbProduct.stock < qty) {
-        throw { status: 409, message: `${dbProduct.name} out of stock` };
+        throw { status: 409, message: `${dbProduct.name} is out of stock` };
       }
 
-      totalAmount += dbProduct.price * qty;
+      subtotal += dbProduct.price * qty;
 
       orderProducts.push({
         product: dbProduct._id,
@@ -92,23 +113,87 @@ export const createOrder = async (req, res) => {
         priceAtPurchase: dbProduct.price,
       });
 
+      // Reduce stock
       dbProduct.stock -= qty;
       await dbProduct.save({ session });
     }
 
+
+    // GST = 12% (your selection)
+    const tax = Math.round(subtotal * 0.12);
+
+    // Delivery charge (using region lookup)
+    const pincode = address.pincode?.toString();
+    let region = "metro";
+
+    // Fetch region from our pincode API
+    try {
+      const pinRes = await axios.get(`${process.env.BASE_URL}/api/pincode/${pincode}`);
+      region = pinRes.data.region || "metro";
+    } catch {
+      region = "remote"; // fallback if postal API fails
+    }
+
+    const deliveryCharge = calculateDeliveryCharge(region);
+
+    // COD Charge (only if allowed)
+    const codCharge = paymentMethod === "COD" ? 20 : 0;
+
+    // FINAL PRICE — server authoritative
+    const totalAmount = subtotal + tax + deliveryCharge + codCharge;
+
+    // --------------------------------------------------
+    // 5️⃣ CREATE ORDER (transaction safe)
+    // --------------------------------------------------
     const [order] = await Order.create(
-      [{
-        user: userId,
-        products: orderProducts,
-        totalAmount,
-        address,
-        statusHistory: [{ status: "preparing" }],
-      }],
+      [
+        {
+          user: userId,
+          products: orderProducts,
+
+          subtotal,
+          tax,
+          deliveryCharge,
+          codCharge,
+          totalAmount,
+
+          address,
+          paymentMethod,
+
+          paymentStatus: "pending",
+          statusHistory: [{ status: "preparing", date: new Date() }],
+
+          // helpful for COD fraud detection later
+          region,
+        },
+      ],
       { session }
     );
 
+    // After order is successfully created:
+    await axios.post(
+      `${process.env.BASE_URL}/api/shiprocket/create-orde`,
+      { orderId: order._id },
+      { headers: { Authorization: req.headers.authorization } }
+    );
+
+    // Auto-generate AWB
+    await axios.post(
+      `${process.env.BASE_URL}/api/shiprocket/awb`,
+      { orderId: order._id },
+      { headers: { Authorization: req.headers.authorization } }
+    );
+
+    // Auto-generate shipping label
+    await axios.get(
+      `${process.env.BASE_URL}/api/shiprocket/label/${order._id}`,
+      { headers: { Authorization: req.headers.authorization } }
+    );
+
     await session.commitTransaction();
+
     return res.status(201).json({ success: true, data: order });
+
 
   } catch (err) {
     await session.abortTransaction();

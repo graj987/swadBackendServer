@@ -3,55 +3,42 @@ import { User } from "../models/userModel.js";
 
 export const isAuthenticated = async (req, res, next) => {
   try {
-    const auth = req.headers.authorization;
+    const authHeader = req.headers.authorization;
 
-    // 1️⃣ Check header
-    if (!auth || !auth.startsWith("Bearer ")) {
-      return res.status(401).json({
-        success: false,
-        message: "Unauthorized - No token provided",
-      });
+    // No token
+    if (!authHeader?.startsWith("Bearer ")) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
     }
 
-    // 2️⃣ Extract token
-    const token = auth.split(" ")[1];
+    const token = authHeader.split(" ")[1];
 
-    // 3️⃣ Verify token
+    // Verify
     let decoded;
     try {
       decoded = jwt.verify(token, process.env.JWT_SECRET);
     } catch (err) {
-      return res.status(401).json({
-        success: false,
-        message: "Unauthorized - Invalid or expired token",
-      });
+      return res.status(401).json({ success: false, message: "Unauthorized" });
     }
 
-    // 4️⃣ Find user
-    const user = await User.findById(decoded.id).select("_id role email");
-    if (!user) {
-      return res.status(401).json({
-        success: false,
-        message: "Unauthorized - User not found",
-      });
+    // Fetch user
+    const user = await User.findById(decoded.id).select("_id role email status isBlocked");
+
+    if (!user || user.isBlocked || user.status === "deleted") {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
     }
 
-    // 5️⃣ ATTACH USER (🔥 FIX)
+    // Attach to req
     req.user = {
-      id: user._id,
+      id: user._id.toString(),
       role: user.role || "user",
-      email: user.email,
+      email: user.email
     };
 
-    // 🔥 THIS LINE FIXES YOUR CHECKOUT / ORDER ISSUE
-    req.userId = user._id;
+    req.userId = user._id.toString();
 
     next();
   } catch (error) {
     console.error("Auth middleware error:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Authentication failed",
-    });
+    return res.status(401).json({ success: false, message: "Unauthorized" });
   }
 };

@@ -18,6 +18,11 @@ router.get("/products", getProducts);
 router.get("/products/:id", getProductById);
 router.post("/products", addProduct);
 
+router.post("/create", async (req, res) => {
+  const order = new Order(req.body);
+  await order.save();
+  res.json(order);
+});
 /* ORDER ROUTES */
 router.post("/postorders", isAuthenticated, createOrder);        //Create new order
 router.get("/my", isAuthenticated, getMyOrders); //Get all user's orders
