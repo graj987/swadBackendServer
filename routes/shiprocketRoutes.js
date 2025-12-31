@@ -1,14 +1,28 @@
 import express from "express";
-import { createShiprocketOrder, generateAWB, getTracking, shiprocketWebhook } from "../controllers/shiprocketController.js";
+import { 
+  createShiprocketOrder, 
+  generateAWB, 
+  generateManifest, 
+  getTracking, 
+  shiprocketWebhook 
+} from "../controllers/shiprocketController.js";
 import { isAuthenticated } from "../middleware/auth.js";
 
-
 const router = express.Router();
-//here the route is "create-order" for now i write is wrong create-orde
-router.post("/create-orde", isAuthenticated, createShiprocketOrder);
+
+// Create order inside Shiprocket
+router.post("/create-order", isAuthenticated, createShiprocketOrder);
+
+// Assign AWB
 router.post("/awb", isAuthenticated, generateAWB);
+
+// Get tracking
 router.get("/track/:awb", isAuthenticated, getTracking);
 
-router.post("webhook", express.raw({ type: "application/json" }),shiprocketWebhook);
+// Manifest
+router.get("/manifest/:shipmentId", isAuthenticated, generateManifest);
+
+// Webhook (MUST start with /)
+router.post("/webhook", express.raw({ type: "application/json" }), shiprocketWebhook);
 
 export default router;

@@ -14,6 +14,7 @@ import shiprocketRoutes from "./routes/shiprocketRoutes.js";
 import pincodeRoutes from "./routes/pincodeRoutes.js";
 import codRoutes from "./routes/codRoutes.js";
 import adminOrderRoutes from "./routes/adminOrderRoutes.js";
+import { shiprocketWebhook } from "./controllers/shiprocketController.js";
 
 
 connectDB();
@@ -39,6 +40,11 @@ app.use("/api/shiprocket", shiprocketRoutes);
 app.use("/api/pincode", pincodeRoutes);
 app.use("/api/cod", codRoutes);
 app.use("/api/admin/orders", adminOrderRoutes);        // Orders
+app.post("/api/shiprocket/webhook", 
+  express.raw({ type: "application/json" }), 
+  shiprocketWebhook
+);
+
 
 // Global error handler (optional but recommended)
 app.use((err, req, res, next) => {
