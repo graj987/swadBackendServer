@@ -13,9 +13,10 @@ const productSchema = new mongoose.Schema(
     },
     category: {
       type: String,
-      enum: ["Snacks", "Meal", "Sweets", "Pickles", "Drinks", "Other"],
-      default: "Other",
+      required: true,
+      trim: true,
     },
+
     price: {
       type: Number,
       required: [true, "Product price is required"],
@@ -49,10 +50,8 @@ const productSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-/* ---------------------------------------------
-   🔥 ADD TEXT INDEX HERE — THIS IS THE CORRECT SPOT
----------------------------------------------- */
 productSchema.index({ name: "text", category: "text" });
 
 const Product = mongoose.model("Product", productSchema);
+
 export default Product;
