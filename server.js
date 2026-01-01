@@ -11,10 +11,10 @@ import usersRoutes from "./routes/usersRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
 import paymentRoutes from "./routes/paymentRoutes.js";
 import shiprocketRoutes from "./routes/shiprocketRoutes.js";
-import pincodeRoutes from "./routes/pincodeRoutes.js";
 import codRoutes from "./routes/codRoutes.js";
 import adminOrderRoutes from "./routes/adminOrderRoutes.js";
 import { shiprocketWebhook } from "./controllers/shiprocketController.js";
+import addressRoutes from "./routes/addressRoutes.js";
 
 
 connectDB();
@@ -32,18 +32,19 @@ app.get("/", (req, res) => {
 
 // API Routes
 app.use("/api/users", usersRoutes);         // ⭐ ALL Auth + OTP + Profile
-app.use("/api/products", productRoutes);    // Products
+app.use("/api/products", productRoutes);  
+app.use("/api/address",addressRoutes)  // Products
 app.use("/api/orders", orderRoutes);        // Orders
 app.use("/api/admin", adminRoutes);         // Admin operations
 app.use("/api/payments", paymentRoutes);    // Payment gateway routes
 app.use("/api/shiprocket", shiprocketRoutes);
-app.use("/api/pincode", pincodeRoutes);
 app.use("/api/cod", codRoutes);
 app.use("/api/admin/orders", adminOrderRoutes);        // Orders
 app.post("/api/shiprocket/webhook", 
   express.raw({ type: "application/json" }), 
   shiprocketWebhook
 );
+
 
 
 // Global error handler (optional but recommended)

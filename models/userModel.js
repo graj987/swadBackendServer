@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 
 const userSchema = new mongoose.Schema({
-  name: {type: String, required: true },
+  name: { type: String, required: true },
   email: { type: String, required: true, unique: true },
   password: { type: String, required: true },
   isVerified: { type: Boolean, default: false },
@@ -9,10 +9,12 @@ const userSchema = new mongoose.Schema({
   token: { type: String, default: null },
   otp: { type: String, default: null },
   otpExpiry: { type: Date, default: null },
-  codEligible: { type: Boolean, default: false }, // new users = false
-rtoCount: { type: Number, default: 0 },         // returned orders
-trustScore: { type: Number, default: 0 }, 
+  rtoCount: { type: Number, default: 0 },         // returned orders
+  trustScore: { type: Number, default: 0 },
+  codEligible: { type: Boolean, default: false },
+  deliveredCount: { type: Number, default: 0 },
 
-},{timestamps:true});
+
+}, { timestamps: true });
 
 export const User = mongoose.model("User", userSchema);

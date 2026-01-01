@@ -107,6 +107,7 @@ export const loginUser = async (req, res) => {
     if (!ok)
       return res.status(401).json({ success: false, message: "Invalid credentials" });
 
+    // Reset active sessions
     await Session.deleteMany({ userId: user._id });
     await Session.create({ userId: user._id });
 
@@ -124,14 +125,18 @@ export const loginUser = async (req, res) => {
         id: user._id,
         name: user.name,
         email: user.email,
+
+        // ✔ IMPORTANT FOR CHECKOUT PAGE
+        codEligible: user.codEligible,
+        deliveredCount: user.deliveredCount,
       },
     });
-    await sendLoginNotification(user.email, ip, device);
 
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message });
   }
 };
+
 /* =====================================================
    LOGOUT
 ===================================================== */
@@ -299,6 +304,7 @@ export const getUserProfile = async (req, res) => {
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message });
   }
+  
 };
 export const updateUserProfile = async (req, res) => {
   try {
