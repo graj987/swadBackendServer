@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 const userSchema = new mongoose.Schema({
   name: { type: String, required: true },
   email: { type: String, required: true, unique: true },
+  avatar: { type: String, default: "" },
   password: { type: String, required: true },
   isVerified: { type: Boolean, default: false },
   isLoggedIn: { type: Boolean, default: false },
@@ -13,7 +14,7 @@ const userSchema = new mongoose.Schema({
   trustScore: { type: Number, default: 0 },
   codEligible: { type: Boolean, default: false },
   deliveredCount: { type: Number, default: 0 },
-
+  
 
 }, { timestamps: true });
 

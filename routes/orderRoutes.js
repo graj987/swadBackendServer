@@ -30,7 +30,6 @@ router.get("/:id", isAuthenticated, getOrderById);
 router.put("/update/:id", isAuthenticated, updateOrderStatus);
 router.put("/cancel/:id", isAuthenticated, cancelOrder);
 router.post("/price-preview", isAuthenticated, getPricePreview);
-
-
+router.post("/check-stock",isAuthenticated, checkStock)
 
 export default router;

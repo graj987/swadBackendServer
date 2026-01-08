@@ -13,6 +13,7 @@ import paymentRoutes from "./routes/paymentRoutes.js";
 import shiprocketRoutes from "./routes/shiprocketRoutes.js";
 import codRoutes from "./routes/codRoutes.js";
 import adminOrderRoutes from "./routes/adminOrderRoutes.js";
+import cartRoutes from "./routes/cartRoutes.js"
 import { shiprocketWebhook } from "./controllers/shiprocketController.js";
 import addressRoutes from "./routes/addressRoutes.js";
 
@@ -39,7 +40,8 @@ app.use("/api/admin", adminRoutes);         // Admin operations
 app.use("/api/payments", paymentRoutes);    // Payment gateway routes
 app.use("/api/shiprocket", shiprocketRoutes);
 app.use("/api/cod", codRoutes);
-app.use("/api/admin/orders", adminOrderRoutes);        // Orders
+app.use("/api/admin/orders", adminOrderRoutes);
+app.use("/api/cart",cartRoutes)   ;     // Orders
 app.post("/api/shiprocket/webhook", 
   express.raw({ type: "application/json" }), 
   shiprocketWebhook

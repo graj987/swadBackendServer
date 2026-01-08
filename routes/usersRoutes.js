@@ -1,4 +1,5 @@
 import express from "express";
+import multer from "multer";
 import {
   registerUser,
   loginUser,
@@ -9,16 +10,20 @@ import {
   resetPassword,
   getUserProfile,
   updateUserProfile,
+  uploadAvatar,
+  changePassword,
 } from "../controllers/usersController.js";
 
 import { isAuthenticated } from "../middleware/auth.js";
 
-import multer from "multer";
 import { userSchema, validateUser } from "../validators/userValidate.js";
 
 const router = express.Router();
-const upload = multer({ dest: "uploads/" });
 
+const upload = multer({
+  storage: multer.memoryStorage(),     // required for cloudinary upload_stream
+  limits: { fileSize: 2 * 1024 * 1024 } // 2MB limit
+});
 /* ================= AUTH ================= */
 
 // Register
@@ -48,16 +53,21 @@ router.post("/verify-otp", verifyOTP);
 router.post("/reset-password", resetPassword);
 // Authorization: Bearer <resetToken>
 
-router.post("/change-password", resetPassword);
+router.post("/change-password", changePassword);
 /* ================= USER PROFILE ================= */
 
 router.get("/profile", isAuthenticated, getUserProfile);
+router.post(
+  "/upload-avatar",
+  isAuthenticated,
+  upload.single("image"),
+  uploadAvatar
+);
 
 router.put(
   "/profile",
   isAuthenticated,
-  upload.single("avatar"),
-  updateUserProfile
+  updateUserProfile 
 );
 
 

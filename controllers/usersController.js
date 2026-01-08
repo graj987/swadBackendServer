@@ -9,7 +9,28 @@ import { sendWelcomeEmail } from "./emailVerify/emailServices.js";
 import { sendLoginNotification } from "./emailVerify/emailServices.js";
 import { sendAccountDeletedEmail } from "./emailVerify/emailServices.js";
 import { sendPasswordChangedEmail } from "./emailVerify/emailServices.js";
+import  cloudinary  from "cloudinary";
+import streamifier from "streamifier";
 
+
+cloudinary.v2.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
+
+// Upload file buffer to cloudinary
+const uploadBufferToCloudinary = (buffer, folder = "products") =>
+  new Promise((resolve, reject) => {
+    const uploadStream = cloudinary.v2.uploader.upload_stream(
+      { folder },
+      (err, result) => {
+        if (err) return reject(err);
+        resolve(result);
+      }
+    );
+    streamifier.createReadStream(buffer).pipe(uploadStream);
+  });
 /* =====================================================
    HELPERS
 ===================================================== */
@@ -293,6 +314,79 @@ export const changePassword = async (req, res) => {
 /* =====================================================
    PROFILE
 ===================================================== */
+
+
+export const uploadAvatar = async (req, res) => {
+  try {
+    /* ================= VALIDATION ================= */
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: "No image file provided",
+      });
+    }
+
+    if (!req.file.mimetype.startsWith("image/")) {
+      return res.status(400).json({
+        success: false,
+        message: "Only image files are allowed",
+      });
+    }
+
+    /* ================= FIND USER ================= */
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    /* ================= DELETE OLD AVATAR ================= */
+    if (user.avatar) {
+      try {
+        const publicId = user.avatar
+          .split("/")
+          .pop()
+          .split(".")[0];
+
+        await cloudinary.uploader.destroy(`avatars/${publicId}`);
+      } catch (err) {
+        console.warn("Failed to delete old avatar:", err.message);
+      }
+    }
+
+    /* ================= UPLOAD NEW AVATAR ================= */
+    const uploadResult = await uploadBufferToCloudinary(
+      req.file.buffer,
+      "avatars"
+    );
+
+    /* ================= SAVE ================= */
+    user.avatar = uploadResult.secure_url;
+    await user.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Avatar updated successfully",
+      url: uploadResult.secure_url,
+      user: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        avatar: user.avatar,
+      },
+    });
+  } catch (error) {
+    console.error("Avatar upload error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Avatar upload failed",
+    });
+  }
+};
+
+
 export const getUserProfile = async (req, res) => {
   try {
     const userId = req.user?.id;
@@ -304,24 +398,45 @@ export const getUserProfile = async (req, res) => {
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message });
   }
-  
 };
+
 export const updateUserProfile = async (req, res) => {
   try {
-    const userId = req.user?.id;
-    if (!userId)
-      return res.status(401).json({ success: false, message: "Unauthorized" });
-    const { name, password } = req.body;
-    const user = await User.findById
+    const { name, phone, avatar } = req.body;
 
-    (userId);
-    if (name) user.name = name;
-    if (password && password.length >= 6) {
-      user.password = await bcrypt.hash(password, 10);
+    const user = await User.findById(req.user.id);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
     }
+
+    // Update allowed fields only
+    if (name) user.name = name;
+    if (phone) user.phone = phone;
+    if (avatar) user.avatar = avatar;
+
     await user.save();
-    return res.json({ success: true, message: "Profile updated" });
-  } catch (err) {
-    return res.status(500).json({ success: false, message: err.message });
+
+    res.status(200).json({
+      success: true,
+      message: "Profile updated successfully",
+      user: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        avatar: user.avatar,
+      },
+    });
+  } catch (error) {
+    console.error("Update profile error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to update profile",
+    });
   }
 };
+

@@ -65,3 +65,13 @@ export const searchProducts = async (req, res) => {
     res.status(500).json({ error: "Search failed" });
   }
 };
+
+export const whishlist = async (req, res)=>{
+  try {
+    
+    
+  } catch (error) {
+    
+  }
+
+}
