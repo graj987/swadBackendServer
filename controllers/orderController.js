@@ -3,10 +3,11 @@ import mongoose from "mongoose";
 import Product from "../models/productModel.js";
 import Order from "../models/order.js";
 import Address from "../models/address.js";
-import {User} from "../models/userModel.js";  
+import { User } from "../models/userModel.js";
 import { calculateDeliveryCharge } from "../utils/deliveryCharge.js";
 import { syncOrderWithShiprocket } from "../utils/syncOrder.js";
-import axios from "axios";
+import Notification from "../models/notification.js";
+import {io} from "../server.js";
 
 /* ---------------- PRODUCTS ---------------- */
 
@@ -183,6 +184,14 @@ export const createOrder = async (req, res) => {
       ],
       { session }
     );
+    await Notification.create({
+      type: "order",
+      title: "New Order",
+      message: `Order #${order._id} placed`,
+      link: `/admin/orders/${order._id}`,
+    });
+
+    io.emit("admin-notification", notification);
 
     await session.commitTransaction();
 

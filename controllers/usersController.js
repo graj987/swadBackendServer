@@ -9,8 +9,10 @@ import { sendWelcomeEmail } from "./emailVerify/emailServices.js";
 import { sendLoginNotification } from "./emailVerify/emailServices.js";
 import { sendAccountDeletedEmail } from "./emailVerify/emailServices.js";
 import { sendPasswordChangedEmail } from "./emailVerify/emailServices.js";
-import  cloudinary  from "cloudinary";
+import cloudinary from "cloudinary";
 import streamifier from "streamifier";
+import Notification from "../models/notification.js"
+import { io } from "../server.js";
 
 
 cloudinary.v2.config({
@@ -59,6 +61,15 @@ export const registerUser = async (req, res) => {
 
     user.token = verifyToken;
     await user.save();
+
+    await Notification.create({
+      type: "user",
+      title: "New User",
+      message: `${user.name} just registered`,
+      link: `/admin/users`,
+    });
+    
+    io.emit("admin-notification", notification);
 
     return res.status(201).json({
       success: true,
@@ -277,7 +288,7 @@ export const resetPassword = async (req, res) => {
 
     user.password = await bcrypt.hash(newPassword, 10);
     await user.save();
-    await sendPasswordChangedEmail(user.email, user.name );
+    await sendPasswordChangedEmail(user.email, user.name);
 
     return res.json({
       success: true,
