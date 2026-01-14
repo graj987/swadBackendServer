@@ -1,75 +1,18 @@
-// import mongoose from "mongoose";
-
-// const productSchema = new mongoose.Schema(
-//   {
-    
-//     name: {
-//       type: String,
-//       required: [true, "Product name is required"],
-//       trim: true,
-//     },
-//     description: {
-//       type: String,
-//       required: [true, "Product description is required"],
-//     },
-//     category: {
-//       type: String,
-//       required: true,
-//       trim: true,
-//     },
-//     weight:{
-//       type: Number,
-//     },
-
-//     price: {
-//       type: Number,
-//       required: [true, "Product price is required"],
-//     },
-//     image: {
-//       type: String,
-//       default: "",
-//     },
-//     stock: {
-//       type: Number,
-//       required: true,
-//       min: 0,
-//     },
-//     isAvailable: {
-//       type: Boolean,
-//       default: true,
-//     },
-//     ratings: {
-//       type: Number,
-//       default: 0,
-//     },
-//     numReviews: {
-//       type: Number,
-//       default: 0,
-//     },
-//     featured: {
-//       type: Boolean,
-//       default: false,
-//     },
-//   },
-//   { timestamps: true }
-// );
-
-// productSchema.index({ name: "text", category: "text" });
-
-// const Product = mongoose.model("Product", productSchema);
-
-// export default Product;
 import mongoose from "mongoose";
+
+/* ================= VARIANT SCHEMA ================= */
 
 const variantSchema = new mongoose.Schema(
   {
     weight: {
-      type: String, // "250 g", "500 g", "1 kg"
+      type: String, // e.g. "250 g", "500 g", "1 kg"
       required: true,
+      trim: true,
     },
     price: {
       type: Number,
       required: true,
+      min: 0,
     },
     stock: {
       type: Number,
@@ -79,6 +22,8 @@ const variantSchema = new mongoose.Schema(
   },
   { _id: false }
 );
+
+/* ================= PRODUCT SCHEMA ================= */
 
 const productSchema = new mongoose.Schema(
   {
@@ -107,10 +52,14 @@ const productSchema = new mongoose.Schema(
     variants: {
       type: [variantSchema],
       required: true,
-      validate: v => v.length > 0,
+      validate: {
+        validator: (v) => Array.isArray(v) && v.length > 0,
+        message: "At least one variant is required",
+      },
     },
 
-    /* HERO CONFIG */
+    /* ================= HERO CONFIG ================= */
+
     isHero: {
       type: Boolean,
       default: false,
@@ -118,8 +67,29 @@ const productSchema = new mongoose.Schema(
 
     heroVariantIndex: {
       type: Number,
-      default: 0,
+      default: null,
+      min: 0,
+      validate: [
+        {
+          validator: function (v) {
+            // allow null when not hero
+            if (v === null) return !this.isHero;
+            return Number.isInteger(v);
+          },
+          message: "heroVariantIndex must be an integer or null",
+        },
+        {
+          validator: function (v) {
+            // if hero → index must exist
+            if (this.isHero) return v !== null;
+            return true;
+          },
+          message: "heroVariantIndex is required when product is hero",
+        },
+      ],
     },
+
+    /* ================= META ================= */
 
     ratings: {
       type: Number,
@@ -139,8 +109,18 @@ const productSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+/* ================= INDEXES ================= */
+
+// Text search
 productSchema.index({ name: "text", category: "text" });
+
+// Ensure ONLY ONE hero product exists
+productSchema.index(
+  { isHero: 1 },
+  { unique: true, partialFilterExpression: { isHero: true } }
+);
+
+/* ================= MODEL EXPORT ================= */
 
 const Product = mongoose.model("Product", productSchema);
 export default Product;
-

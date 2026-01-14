@@ -129,37 +129,70 @@ export const verifyAdmin = async (req, res) => {
 
 export const addProduct = async (req, res) => {
   try {
-    const { name, description, price, category, stock } = req.body;
+    const {
+      name,
+      description,
+      category,
+      weight,
+      price,
+      stock,
+    } = req.body;
 
-    if (!name || !description || !price || !stock)
+    // 🔒 Basic validation
+    if (!name || !description || !category) {
       return res.status(400).json({
         success: false,
-        message: "Name, description, price and stock are required",
+        message: "Name, description, and category are required",
       });
+    }
 
-    if (!req.file)
-      return res
-        .status(400)
-        .json({ success: false, message: "Product image required" });
+    // 🔒 Variant validation (THIS WAS MISSING)
+    if (!weight || price == null || stock == null) {
+      return res.status(400).json({
+        success: false,
+        message: "Variant weight, price, and stock are required",
+      });
+    }
 
-    // Upload image to Cloudinary
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: "Product image required",
+      });
+    }
+
+    // Upload image
     const uploadResult = await uploadBufferToCloudinary(req.file.buffer);
 
     const product = await Product.create({
       name,
       description,
-      price,
       category,
-      stock,
       image: uploadResult.secure_url,
+
+      // ✅ CREATE VARIANT ARRAY
+      variants: [
+        {
+          weight,
+          price: Number(price),
+          stock: Number(stock),
+        },
+      ],
     });
 
-    res.status(201).json({ success: true, product });
+    res.status(201).json({
+      success: true,
+      product,
+    });
   } catch (err) {
     console.error("Add product error:", err);
-    res.status(500).json({ success: false, message: err.message });
+    res.status(500).json({
+      success: false,
+      message: err.message,
+    });
   }
 };
+
 
 export const getHeroProduct = async (req, res) => {
   try {
