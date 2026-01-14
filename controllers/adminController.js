@@ -341,27 +341,73 @@ export const getProductById = async (req, res) => {
 
 export const updateProduct = async (req, res) => {
   try {
-    const { name, description, price, category, stock, image, featured } = req.body;
+    const {
+      name,
+      description,
+      category,
+      image,
+      variantIndex,
+      weight,
+      price,
+      stock,
+    } = req.body;
 
     const product = await Product.findById(req.params.id);
-    if (!product) return res.status(404).json({ message: "Product not found" });
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        message: "Product not found",
+      });
+    }
 
-    product.name = name || product.name;
-    product.description = description || product.description;
-    product.price = price || product.price;
-    product.category = category || product.category;
-    product.stock = stock ?? product.stock;
-    product.image = image || product.image;
-    product.featured = featured ?? product.featured;
+    /* ================= PRODUCT LEVEL ================= */
+
+    if (name !== undefined) product.name = name;
+    if (description !== undefined) product.description = description;
+    if (category !== undefined) product.category = category;
+    if (image !== undefined) product.image = image;
+
+    /* ================= VARIANT LEVEL ================= */
+
+    if (variantIndex !== undefined) {
+      const index = Number(variantIndex);
+
+      if (
+        Number.isNaN(index) ||
+        index < 0 ||
+        index >= product.variants.length
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid variant index",
+        });
+      }
+
+      if (weight !== undefined)
+        product.variants[index].weight = weight;
+
+      if (price !== undefined)
+        product.variants[index].price = Number(price);
+
+      if (stock !== undefined)
+        product.variants[index].stock = Number(stock);
+    }
 
     await product.save();
 
-    res.json({ success: true, product });
+    res.json({
+      success: true,
+      product,
+    });
   } catch (err) {
     console.error("updateProduct error:", err);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({
+      success: false,
+      message: "Server error",
+    });
   }
 };
+
 
 // --------------------------------------------------------
 // ORDERS

@@ -1,5 +1,7 @@
 import mongoose from "mongoose";
 
+/* ================= CART ITEM ================= */
+
 const cartItemSchema = new mongoose.Schema(
   {
     product: {
@@ -7,6 +9,25 @@ const cartItemSchema = new mongoose.Schema(
       ref: "Product",
       required: true,
     },
+
+    // 🔥 VARIANT SNAPSHOT (CRITICAL)
+    variant: {
+      weight: {
+        type: String,
+        required: true,
+      },
+      price: {
+        type: Number,
+        required: true,
+        min: 0,
+      },
+      stock: {
+        type: Number,
+        required: true,
+        min: 0,
+      },
+    },
+
     quantity: {
       type: Number,
       required: true,
@@ -16,6 +37,8 @@ const cartItemSchema = new mongoose.Schema(
   { _id: false }
 );
 
+/* ================= CART ================= */
+
 const cartSchema = new mongoose.Schema(
   {
     user: {
@@ -24,9 +47,16 @@ const cartSchema = new mongoose.Schema(
       required: true,
       unique: true,
     },
-    items: [cartItemSchema],
+
+    items: {
+      type: [cartItemSchema],
+      default: [],
+    },
   },
   { timestamps: true }
 );
 
-export default mongoose.model("Cart", cartSchema);
+/* ================= EXPORT ================= */
+
+const Cart = mongoose.model("Cart", cartSchema);
+export default Cart;

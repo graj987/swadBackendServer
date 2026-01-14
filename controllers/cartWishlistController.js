@@ -6,34 +6,58 @@ import Product from "../models/productModel.js";
 export const addToCart = async (req, res) => {
   try {
     const userId = req.user.id;
-    let { productId, quantity = 1 } = req.body;
+    let { productId, quantity = 1, variant } = req.body;
 
     quantity = Math.max(1, Number(quantity));
 
-    if (!productId)
-      return res.status(400).json({ success: false, message: "Product ID required" });
+    if (!productId || !variant)
+      return res.status(400).json({
+        success: false,
+        message: "Product and variant are required",
+      });
+
+    if (!variant.price || !variant.weight)
+      return res.status(400).json({
+        success: false,
+        message: "Invalid variant data",
+      });
 
     const product = await Product.findById(productId);
     if (!product)
-      return res.status(404).json({ success: false, message: "Product not found" });
-
-    if (product.stock < quantity)
-      return res.status(400).json({ success: false, message: "Insufficient stock" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Product not found" });
 
     let cart = await Cart.findOne({ user: userId });
 
     if (!cart) {
       cart = await Cart.create({
         user: userId,
-        items: [{ product: productId, quantity }],
+        items: [
+          {
+            product: productId,
+            variant,
+            quantity,
+          },
+        ],
       });
     } else {
-      const item = cart.items.find(i => i.product.toString() === productId);
-      if (item) item.quantity += quantity;
-      else cart.items.push({ product: productId, quantity });
+      const item = cart.items.find(
+        (i) =>
+          i.product.toString() === productId &&
+          i.variant.weight === variant.weight
+      );
+
+      if (item) {
+        item.quantity += quantity;
+      } else {
+        cart.items.push({ product: productId, variant, quantity });
+      }
+
       await cart.save();
     }
 
+    // Remove from wishlist if exists
     await Wishlist.updateOne(
       { user: userId },
       { $pull: { products: productId } }
@@ -41,15 +65,16 @@ export const addToCart = async (req, res) => {
 
     res.json({ success: true, message: "Added to cart" });
   } catch (err) {
-    console.error(err);
+    console.error("addToCart error:", err);
     res.status(500).json({ success: false, message: "Cart error" });
   }
 };
 
 /* ================= GET CART ================= */
 export const getCart = async (req, res) => {
-  const cart = await Cart.findOne({ user: req.user.id })
-    .populate("items.product");
+  const cart = await Cart.findOne({ user: req.user.id }).populate(
+    "items.product"
+  );
 
   res.json({
     items: cart ? cart.items : [],
@@ -58,15 +83,19 @@ export const getCart = async (req, res) => {
 
 /* ================= UPDATE CART QTY ================= */
 export const updateCartItem = async (req, res) => {
-  const { productId, quantity } = req.body;
+  const { productId, weight, quantity } = req.body;
 
-  if (!productId || quantity < 1)
+  if (!productId || !weight || quantity < 1)
     return res.status(400).json({ message: "Invalid request" });
 
   const cart = await Cart.findOne({ user: req.user.id });
   if (!cart) return res.status(404).json({ message: "Cart not found" });
 
-  const item = cart.items.find(i => i.product.toString() === productId);
+  const item = cart.items.find(
+    (i) =>
+      i.product.toString() === productId && i.variant.weight === weight
+  );
+
   if (!item) return res.status(404).json({ message: "Item not found" });
 
   item.quantity = quantity;
@@ -77,14 +106,20 @@ export const updateCartItem = async (req, res) => {
 
 /* ================= REMOVE CART ITEM ================= */
 export const removeCartItem = async (req, res) => {
-  const { productId } = req.params;
+  const { productId, weight } = req.params;
 
   const cart = await Cart.findOne({ user: req.user.id });
   if (!cart) return res.status(404).json({ message: "Cart not found" });
 
-  cart.items = cart.items.filter(i => i.product.toString() !== productId);
-  await cart.save();
+  cart.items = cart.items.filter(
+    (i) =>
+      !(
+        i.product.toString() === productId &&
+        i.variant.weight === weight
+      )
+  );
 
+  await cart.save();
   res.json({ success: true });
 };
 
@@ -95,11 +130,15 @@ export const toggleWishlist = async (req, res) => {
     const { productId } = req.body;
 
     if (!productId)
-      return res.status(400).json({ success: false, message: "Product ID required" });
+      return res
+        .status(400)
+        .json({ success: false, message: "Product ID required" });
 
     const productExists = await Product.exists({ _id: productId });
     if (!productExists)
-      return res.status(404).json({ success: false, message: "Product not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Product not found" });
 
     let wishlist = await Wishlist.findOne({ user: userId });
 
@@ -108,7 +147,9 @@ export const toggleWishlist = async (req, res) => {
       return res.json({ success: true, action: "added" });
     }
 
-    const exists = wishlist.products.some(p => p.toString() === productId);
+    const exists = wishlist.products.some(
+      (p) => p.toString() === productId
+    );
 
     if (exists) {
       wishlist.products.pull(productId);
@@ -120,7 +161,7 @@ export const toggleWishlist = async (req, res) => {
     await wishlist.save();
     res.json({ success: true, action: "added" });
   } catch (err) {
-    console.error(err);
+    console.error("wishlist error:", err);
     res.status(500).json({ success: false, message: "Wishlist error" });
   }
 };
@@ -129,28 +170,38 @@ export const toggleWishlist = async (req, res) => {
 export const moveWishlistToCart = async (req, res) => {
   try {
     const userId = req.user.id;
-    let { productId, quantity = 1 } = req.body;
+    let { productId, quantity = 1, variant } = req.body;
 
     quantity = Math.max(1, Number(quantity));
 
+    if (!variant)
+      return res
+        .status(400)
+        .json({ success: false, message: "Variant required" });
+
     const product = await Product.findById(productId);
     if (!product)
-      return res.status(404).json({ success: false, message: "Product not found" });
-
-    if (product.stock < quantity)
-      return res.status(400).json({ success: false, message: "Insufficient stock" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Product not found" });
 
     let cart = await Cart.findOne({ user: userId });
 
     if (!cart) {
       cart = await Cart.create({
         user: userId,
-        items: [{ product: productId, quantity }],
+        items: [{ product: productId, variant, quantity }],
       });
     } else {
-      const item = cart.items.find(i => i.product.toString() === productId);
+      const item = cart.items.find(
+        (i) =>
+          i.product.toString() === productId &&
+          i.variant.weight === variant.weight
+      );
+
       if (item) item.quantity += quantity;
-      else cart.items.push({ product: productId, quantity });
+      else cart.items.push({ product: productId, variant, quantity });
+
       await cart.save();
     }
 
@@ -166,25 +217,12 @@ export const moveWishlistToCart = async (req, res) => {
   }
 };
 
-/* ================= GET WISHLIST ================= */
-export const getWishlist = async (req, res) => {
-  const wishlist = await Wishlist.findOne({ user: req.user.id })
-    .populate("products");
-
-  res.json({
-    products: wishlist ? wishlist.products : [],
-  });
-};
-
 /* ================= COUNTS ================= */
 export const getCounts = async (req, res) => {
   try {
-    const userId = req.user.id;
+    const cart = await Cart.findOne({ user: req.user.id });
 
-    const [cart, wishlist] = await Promise.all([
-      Cart.findOne({ user: userId }).select("items.quantity"),
-      Wishlist.findOne({ user: userId }).select("products"),
-    ]);
+    const wishlist = await Wishlist.findOne({ user: req.user.id });
 
     const cartCount = cart
       ? cart.items.reduce((s, i) => s + i.quantity, 0)
@@ -193,7 +231,16 @@ export const getCounts = async (req, res) => {
     const wishlistCount = wishlist ? wishlist.products.length : 0;
 
     res.json({ cartCount, wishlistCount });
-  } catch (err) {
-    res.status(500).json({ cartCount: 0, wishlistCount: 0 });
+  } catch {
+    res.json({ cartCount: 0, wishlistCount: 0 });
   }
+};
+
+export const getWishlist = async (req, res) => {
+  const wishlist = await Wishlist.findOne({ user: req.user.id })
+    .populate("products");
+
+  res.json({
+    products: wishlist ? wishlist.products : [],
+  });
 };

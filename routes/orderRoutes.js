@@ -1,9 +1,7 @@
 // routes/orderRoutes.js
 import express from "express";
 import {
-  getProducts,
-  getProductById,
-  addProduct,
+
   createOrder,
   getOrdersCount,
   getMyOrders,
@@ -17,10 +15,6 @@ import { getPricePreview } from "../controllers/pricePreviewController.js";
 
 const router = express.Router();
 
-/* PRODUCT ROUTES */
-router.get("/products", getProducts);
-router.get("/products/:id", getProductById);
-router.post("/products", addProduct);
 /* ORDER ROUTES */
 router.post("/postorders", isAuthenticated, createOrder);        //Create new order
 router.get("/my", isAuthenticated, getMyOrders); //Get all user's orders
