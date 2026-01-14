@@ -168,22 +168,31 @@ export const getHeroProduct = async (req, res) => {
     if (!product) {
       return res.status(404).json({
         success: false,
-        message: "Hero product not found",
+        message: "Hero product not set",
       });
     }
 
-    const variant = product.variants[product.heroVariantIndex];
+    const index = product.heroVariantIndex;
 
-    if (!variant) {
-      return res.status(404).json({
+    if (
+      typeof index !== "number" ||
+      !Array.isArray(product.variants) ||
+      index < 0 ||
+      index >= product.variants.length
+    ) {
+      return res.status(500).json({
         success: false,
-        message: "Hero variant not found",
+        message: "Hero product data corrupted",
       });
     }
+
+    const variant = product.variants[index];
 
     res.status(200).json({
       success: true,
-      id: product._id,
+      productId: product._id,
+      name: product.name,
+      image: variant.image,
       weight: variant.weight,
       price: variant.price,
       stock: variant.stock,
@@ -199,36 +208,51 @@ export const getHeroProduct = async (req, res) => {
 };
 export const setHeroProduct = async (req, res) => {
   try {
-    const { productId, heroVariantIndex } = req.body;
+    let { productId, heroVariantIndex } = req.body;
 
-    if (!productId || heroVariantIndex == null) {
+    heroVariantIndex = Number(heroVariantIndex);
+
+    if (!productId || Number.isNaN(heroVariantIndex)) {
       return res.status(400).json({
         success: false,
-        message: "productId and heroVariantIndex required",
+        message: "Valid productId and heroVariantIndex required",
       });
     }
 
-    // Remove hero from all products
-    await Product.updateMany({}, { isHero: false });
-
-    // Set hero on selected product
     const product = await Product.findById(productId);
 
-    if (!product || !product.variants[heroVariantIndex]) {
+    if (!product) {
       return res.status(404).json({
         success: false,
-        message: "Invalid product or variant",
+        message: "Product not found",
       });
     }
+
+    if (
+      !Array.isArray(product.variants) ||
+      heroVariantIndex < 0 ||
+      heroVariantIndex >= product.variants.length
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Variant index out of range",
+      });
+    }
+
+    // 🔒 SAFE: only unset previous hero, not all products blindly
+    await Product.updateMany(
+      { isHero: true },
+      { isHero: false, heroVariantIndex: null }
+    );
 
     product.isHero = true;
     product.heroVariantIndex = heroVariantIndex;
 
     await product.save();
 
-    res.json({
+    res.status(200).json({
       success: true,
-      message: "Hero product updated",
+      message: "Hero product updated successfully",
     });
 
   } catch (err) {
@@ -239,6 +263,7 @@ export const setHeroProduct = async (req, res) => {
     });
   }
 };
+
 
 
 // Delete product
