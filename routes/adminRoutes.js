@@ -56,7 +56,7 @@ router.get("/products", protectAdmin, getProducts);
 router.get("/products/count", protectAdmin, getProductsCount);
 router.get("/products/:id", protectAdmin, getProductById);
 router.put("/products/:id", protectAdmin, updateProduct);
-router.put("/heroput", protectAdmin, setHeroProduct);
+router.put("/hero", protectAdmin, setHeroProduct);
 router.get("/hero", protectAdmin, getHeroProduct);
 
 
