@@ -18,8 +18,9 @@ import {
   getProductById,
   updateProduct,
   updateOrderStatus,
-  updateHeroConfig,
-  getHeroConfig,
+  setHeroProduct,
+  getHeroProduct,
+ 
 } from "../controllers/adminController.js";
 
 import { protectAdmin } from "../middleware/adminMiddleware.js";
@@ -55,8 +56,8 @@ router.get("/products", protectAdmin, getProducts);
 router.get("/products/count", protectAdmin, getProductsCount);
 router.get("/products/:id", protectAdmin, getProductById);
 router.put("/products/:id", protectAdmin, updateProduct);
-router.put("/heroput", protectAdmin, updateHeroConfig);
-router.get("/hero", protectAdmin, getHeroConfig);
+router.put("/heroput", protectAdmin, setHeroProduct);
+router.get("/hero", protectAdmin, getHeroProduct);
 
 
 router.post(

@@ -1,4 +1,5 @@
 import productModel from "../models/productModel.js";
+
 const Product = productModel;
 
 export const getProducts = async (req, res) => {
@@ -12,34 +13,31 @@ export const getProducts = async (req, res) => {
 
 export const getProductHero = async (req, res) => {
   try {
-    // Fetch ONE featured product for hero
-    const product = await Product.findOne({ isHero: true }).select(
-      "weight price stock"
-    );
+    const product = await Product.findOne({ isHero: true });
 
     if (!product) {
-      return res.status(404).json({
-        success: false,
-        message: "Hero product not found",
-      });
+      return res.status(404).json({ success: false });
     }
 
-    res.status(200).json({
+    const variant = product.variants[product.heroVariantIndex];
+
+    if (!variant || variant.stock === 0) {
+      return res.status(404).json({ success: false });
+    }
+
+    res.json({
       success: true,
-      id:product.id,
-      weight: product.weight,
-      price: product.price,
-      stock: product.stock,
+      id: product._id,
+      weight: variant.weight,
+      price: variant.price,
+      stock: variant.stock,
     });
 
-  } catch (error) {
-    console.error("Hero product error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Server error",
-    });
+  } catch (err) {
+    res.status(500).json({ success: false });
   }
 };
+
 
 export const featuredProducts = async (req, res) => {
   try {

@@ -4,13 +4,15 @@ import {
   getProductById,
   getProductsCount,
   featuredProducts,
-  searchProducts
+  searchProducts,
+  getProductHero
 } from "../controllers/productsController.js";
 
 
 const router = express.Router();
 
 router.get("/", getProducts);
+router.get("/hero",getProductHero);
 router.get("/count", getProductsCount);
 router.get("/featured", featuredProducts);
 router.get("/search", searchProducts); // must be BEFORE /:id

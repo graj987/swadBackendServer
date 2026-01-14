@@ -5,10 +5,7 @@ import Order from "../models/order.js";
 import { User } from "../models/userModel.js";
 import cloudinary from "cloudinary";
 import streamifier from "streamifier";
-import HeroConfig from "../models/heroProductModel.js";
-// --------------------------------------------------------
-// CLOUDINARY CONFIG
-// --------------------------------------------------------
+
 cloudinary.v2.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
@@ -164,62 +161,85 @@ export const addProduct = async (req, res) => {
   }
 };
 
-export const getHeroConfig = async (req, res) => {
+export const getHeroProduct = async (req, res) => {
   try {
-    let hero = await HeroConfig.findOne();
+    const product = await Product.findOne({ isHero: true });
 
-    // Auto-create if missing
-    if (!hero) {
-      hero = await HeroConfig.create({
-        price: 0,
-        weight: "0 g",
-        stock: 0,
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        message: "Hero product not found",
       });
     }
 
-    res.json({
+    const variant = product.variants[product.heroVariantIndex];
+
+    if (!variant) {
+      return res.status(404).json({
+        success: false,
+        message: "Hero variant not found",
+      });
+    }
+
+    res.status(200).json({
       success: true,
-      price: hero.price,
-      weight: hero.weight,
-      stock: hero.stock,
+      id: product._id,
+      weight: variant.weight,
+      price: variant.price,
+      stock: variant.stock,
     });
+
   } catch (err) {
-    res.status(500).json({ success: false });
+    console.error("Hero fetch error:", err);
+    res.status(500).json({
+      success: false,
+      message: "Server error",
+    });
   }
 };
-
-/* ================= UPDATE HERO (ADMIN) ================= */
-export const updateHeroConfig = async (req, res) => {
+export const setHeroProduct = async (req, res) => {
   try {
-    const { price, weight, stock } = req.body;
+    const { productId, heroVariantIndex } = req.body;
 
-    if (price == null || !weight || stock == null) {
+    if (!productId || heroVariantIndex == null) {
       return res.status(400).json({
         success: false,
-        message: "All fields required",
+        message: "productId and heroVariantIndex required",
       });
     }
 
-    let hero = await HeroConfig.findOne();
+    // Remove hero from all products
+    await Product.updateMany({}, { isHero: false });
 
-    if (!hero) {
-      hero = new HeroConfig();
+    // Set hero on selected product
+    const product = await Product.findById(productId);
+
+    if (!product || !product.variants[heroVariantIndex]) {
+      return res.status(404).json({
+        success: false,
+        message: "Invalid product or variant",
+      });
     }
 
-    hero.price = price;
-    hero.weight = weight;
-    hero.stock = stock;
+    product.isHero = true;
+    product.heroVariantIndex = heroVariantIndex;
 
-    await hero.save();
+    await product.save();
 
     res.json({
       success: true,
-      message: "Hero details updated",
+      message: "Hero product updated",
     });
+
   } catch (err) {
-    res.status(500).json({ success: false });
+    console.error("Hero update error:", err);
+    res.status(500).json({
+      success: false,
+      message: "Server error",
+    });
   }
 };
+
 
 // Delete product
 export const deleteProduct = async (req, res) => {
