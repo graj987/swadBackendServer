@@ -2,6 +2,14 @@ import mongoose from "mongoose";
 
 const productSchema = new mongoose.Schema(
   {
+    isHero: {
+      type: Boolean,
+      default: false,
+    },
+    weight: String,
+    price: Number,
+    stock: Number,
+
     name: {
       type: String,
       required: [true, "Product name is required"],
@@ -15,6 +23,9 @@ const productSchema = new mongoose.Schema(
       type: String,
       required: true,
       trim: true,
+    },
+    weight: {
+      type: Number,
     },
 
     price: {

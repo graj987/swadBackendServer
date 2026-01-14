@@ -5,7 +5,7 @@ import Order from "../models/order.js";
 import { User } from "../models/userModel.js";
 import cloudinary from "cloudinary";
 import streamifier from "streamifier";
-
+import HeroConfig from "../models/heroProductModel.js";
 // --------------------------------------------------------
 // CLOUDINARY CONFIG
 // --------------------------------------------------------
@@ -161,6 +161,63 @@ export const addProduct = async (req, res) => {
   } catch (err) {
     console.error("Add product error:", err);
     res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+export const getHeroConfig = async (req, res) => {
+  try {
+    let hero = await HeroConfig.findOne();
+
+    // Auto-create if missing
+    if (!hero) {
+      hero = await HeroConfig.create({
+        price: 0,
+        weight: "0 g",
+        stock: 0,
+      });
+    }
+
+    res.json({
+      success: true,
+      price: hero.price,
+      weight: hero.weight,
+      stock: hero.stock,
+    });
+  } catch (err) {
+    res.status(500).json({ success: false });
+  }
+};
+
+/* ================= UPDATE HERO (ADMIN) ================= */
+export const updateHeroConfig = async (req, res) => {
+  try {
+    const { price, weight, stock } = req.body;
+
+    if (price == null || !weight || stock == null) {
+      return res.status(400).json({
+        success: false,
+        message: "All fields required",
+      });
+    }
+
+    let hero = await HeroConfig.findOne();
+
+    if (!hero) {
+      hero = new HeroConfig();
+    }
+
+    hero.price = price;
+    hero.weight = weight;
+    hero.stock = stock;
+
+    await hero.save();
+
+    res.json({
+      success: true,
+      message: "Hero details updated",
+    });
+  } catch (err) {
+    res.status(500).json({ success: false });
   }
 };
 

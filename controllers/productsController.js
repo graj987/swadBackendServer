@@ -10,6 +10,37 @@ export const getProducts = async (req, res) => {
   }
 };
 
+export const getProductHero = async (req, res) => {
+  try {
+    // Fetch ONE featured product for hero
+    const product = await Product.findOne({ isHero: true }).select(
+      "weight price stock"
+    );
+
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        message: "Hero product not found",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      id:product.id,
+      weight: product.weight,
+      price: product.price,
+      stock: product.stock,
+    });
+
+  } catch (error) {
+    console.error("Hero product error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Server error",
+    });
+  }
+};
+
 export const featuredProducts = async (req, res) => {
   try {
     const products = await Product.find({ featured: true });
