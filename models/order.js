@@ -10,17 +10,8 @@ const orderItemSchema = new mongoose.Schema(
       required: true,
     },
 
-    // 🔥 VARIANT SNAPSHOT (CRITICAL)
     variant: {
-      weight: {
-        type: String,
-        required: true,
-      },
-      price: {
-        type: Number,
-        required: true,
-        min: 0,
-      },
+      weight: { type: String, required: true },
     },
 
     quantity: {
@@ -29,7 +20,6 @@ const orderItemSchema = new mongoose.Schema(
       min: 1,
     },
 
-    // For auditing / refunds (explicit)
     priceAtPurchase: {
       type: Number,
       required: true,
@@ -47,21 +37,42 @@ const addressSchema = new mongoose.Schema(
     phone: { type: String, required: true },
     line1: { type: String, required: true },
     city: { type: String, required: true },
+    state: { type: String},
     pincode: { type: String, required: true },
+    country: { type: String, default: "India" },
   },
   { _id: false }
 );
+
+/* ================= CONSTANTS ================= */
+
+const ORDER_STATUSES = [
+  "placed",
+  "preparing",
+  "shipped",
+  "delivered",
+  "cancelled",
+];
+
+const PAYMENT_STATUSES = [
+  "pending",
+  "initiated",
+  "paid",
+  "failed",
+];
 
 /* ================= ORDER ================= */
 
 const orderSchema = new mongoose.Schema(
   {
+    /* USER */
     user: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: true,
     },
 
+    /* ITEMS */
     items: {
       type: [orderItemSchema],
       required: true,
@@ -71,36 +82,17 @@ const orderSchema = new mongoose.Schema(
       },
     },
 
+    /* ADDRESS */
     address: {
       type: addressSchema,
       required: true,
     },
 
-    /* ================= PRICE BREAKDOWN ================= */
-
-    subtotal: {
-      type: Number,
-      required: true,
-      min: 0,
-    },
-
-    tax: {
-      type: Number,
-      default: 0,
-      min: 0,
-    },
-
-    deliveryCharge: {
-      type: Number,
-      default: 0,
-      min: 0,
-    },
-
-    codCharge: {
-      type: Number,
-      default: 0,
-      min: 0,
-    },
+    /* PRICING */
+    subtotal: { type: Number, required: true, min: 0 },
+    tax: { type: Number, default: 0, min: 0 },
+    deliveryCharge: { type: Number, default: 0, min: 0 },
+    codCharge: { type: Number, default: 0, min: 0 },
 
     totalAmount: {
       type: Number,
@@ -108,8 +100,7 @@ const orderSchema = new mongoose.Schema(
       min: 0,
     },
 
-    /* ================= PAYMENT ================= */
-
+    /* PAYMENT */
     paymentMethod: {
       type: String,
       enum: ["COD", "Online"],
@@ -118,26 +109,9 @@ const orderSchema = new mongoose.Schema(
 
     paymentStatus: {
       type: String,
-      enum: ["pending", "paid", "failed"],
+      enum: PAYMENT_STATUSES,
       default: "pending",
     },
-
-    /* ================= ORDER STATUS ================= */
-
-    orderStatus: {
-      type: String,
-      enum: ["preparing", "shipped", "delivered", "cancelled"],
-      default: "preparing",
-    },
-
-    statusHistory: [
-      {
-        status: String,
-        date: { type: Date, default: Date.now },
-      },
-    ],
-
-    /* ================= RAZORPAY ================= */
 
     razorpay_order_id: String,
     razorpay_payment_id: String,
@@ -148,15 +122,64 @@ const orderSchema = new mongoose.Schema(
       default: {},
     },
 
-    /* ================= SHIPROCKET ================= */
+    /* ORDER STATUS (BUSINESS) */
+    orderStatus: {
+      type: String,
+      enum: ORDER_STATUSES,
+      default: "placed",
+    },
 
-    shiprocketOrderId: { type: String, default: null },
-    shipmentId: { type: String, default: null },
-    awb: { type: String, default: null },
-    trackingUrl: { type: String, default: null },
+    statusHistory: [
+      {
+        status: { type: String, required: true },
+        date: { type: Date, default: Date.now },
+      },
+    ],
+
+    /* ================= SHIPPING (SHIPROCKET) ================= */
+
+    shipping: {
+      shiprocketOrderId: { type: String, default: null },
+      shipmentId: { type: String, default: null },
+      awb: { type: String, default: null },
+
+      courierName: { type: String, default: null },
+      courierId: { type: String, default: null },
+
+      trackingUrl: { type: String, default: null },
+
+      status: {
+        type: String,
+        enum: [
+          "created",
+          "pickup_scheduled",
+          "shipped",
+          "in_transit",
+          "out_for_delivery",
+          "delivered",
+          "rto",
+          "cancelled",
+        ],
+        default: null,
+      },
+
+      trackHistory: [
+        {
+          status: String,
+          location: String,
+          date: { type: Date, default: Date.now },
+          message: String,
+        },
+      ],
+    },
   },
   { timestamps: true }
 );
+
+/* ================= INDEXES ================= */
+
+// Required for fast webhook lookups
+orderSchema.index({ "shipping.awb": 1 });
 
 /* ================= EXPORT ================= */
 

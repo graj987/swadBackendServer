@@ -26,6 +26,7 @@ import {
 import { protectAdmin } from "../middleware/adminMiddleware.js";
 import notification from "../models/notification.js";
 
+
 const router = express.Router();
 
 // ------------------- MULTER (Memory Storage for Cloudinary) -------------------
@@ -59,7 +60,7 @@ router.get("/products/:id", protectAdmin, getProductById);
 router.put("/products/:id", protectAdmin, updateProduct);
 router.put("/hero", protectAdmin, setHeroProduct);
 router.get("/hero", protectAdmin, getHeroProduct);
-router.get("/notificatoin", protectAdmin , notification)
+router.get("/notificatoin", protectAdmin , notification )
 
 
 router.post(

@@ -8,8 +8,8 @@ import { calculateDeliveryCharge } from "../utils/deliveryCharge.js";
 import { syncOrderWithShiprocket } from "../utils/syncOrder.js";
 import Notification from "../models/notification.js";
 import {io} from "../server.js";
-
-
+import PDFDocument from "pdfkit";
+import Cart from "../models/cart.js";
 
 
 
@@ -24,26 +24,25 @@ export const createOrder = async (req, res) => {
     const { addressId, paymentMethod = "COD" } = req.body;
 
     if (!userId) {
-      return res.status(401).json({ success: false, message: "Unauthorized" });
+      throw { status: 401, message: "Unauthorized" };
     }
 
     /* ---------------- CART ---------------- */
-    const cart = await Cart.findOne({ user: userId }).session(session);
+    const cartDoc = await Cart.findOne({ user: userId })
+      .session(session)
+      .lean(false);
 
-    if (!cart || cart.items.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: "Cart is empty",
-      });
+    if (!cartDoc || cartDoc.items.length === 0) {
+      throw { status: 400, message: "Cart is empty" };
     }
 
     /* ---------------- ADDRESS ---------------- */
-    const address = await Address.findOne({ _id: addressId, userId }).lean();
+    const address = await Address.findOne({ _id: addressId, userId })
+      .session(session)
+      .lean();
+
     if (!address) {
-      return res.status(404).json({
-        success: false,
-        message: "Address not found",
-      });
+      throw { status: 404, message: "Address not found" };
     }
 
     const formattedAddress = {
@@ -56,26 +55,20 @@ export const createOrder = async (req, res) => {
 
     /* ---------------- PAYMENT ---------------- */
     if (!["COD", "Online"].includes(paymentMethod)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid payment method",
-      });
+      throw { status: 400, message: "Invalid payment method" };
     }
 
     const user = await User.findById(userId).session(session);
 
     if (paymentMethod === "COD" && !user.codEligible) {
-      return res.status(400).json({
-        success: false,
-        message: "COD not allowed for your account",
-      });
+      throw { status: 400, message: "COD not allowed for your account" };
     }
 
     /* ---------------- PRICE + STOCK ---------------- */
     let subtotal = 0;
     const orderItems = [];
 
-    for (const item of cart.items) {
+    for (const item of cartDoc.items) {
       const product = await Product.findById(item.product).session(session);
 
       if (!product) {
@@ -89,7 +82,7 @@ export const createOrder = async (req, res) => {
       if (!variant) {
         throw {
           status: 400,
-          message: `Variant ${item.variant.weight} no longer available`,
+          message: `Variant ${item.variant.weight} not available`,
         };
       }
 
@@ -100,21 +93,21 @@ export const createOrder = async (req, res) => {
         };
       }
 
-      // Deduct stock
+      // ✅ Deduct stock safely
       variant.stock -= item.quantity;
       await product.save({ session });
 
-      const itemTotal = item.quantity * item.variant.price;
+      const itemTotal = item.quantity * variant.price;
       subtotal += itemTotal;
 
       orderItems.push({
         product: product._id,
         variant: {
-          weight: item.variant.weight,
-          price: item.variant.price,
+          weight: variant.weight,
+          price: variant.price,
         },
         quantity: item.quantity,
-        priceAtPurchase: item.variant.price,
+        priceAtPurchase: variant.price,
       });
     }
 
@@ -125,7 +118,7 @@ export const createOrder = async (req, res) => {
     const totalAmount = subtotal + tax + deliveryCharge + codCharge;
 
     /* ---------------- CREATE ORDER ---------------- */
-    const order = await Order.create(
+    const [order] = await Order.create(
       [
         {
           user: userId,
@@ -137,28 +130,37 @@ export const createOrder = async (req, res) => {
           codCharge,
           totalAmount,
           paymentMethod,
+          orderStatus: "placed",
+          paymentStatus: paymentMethod === "COD" ? "pending" : "initiated",
         },
       ],
       { session }
     );
 
-    /* ---------------- CLEANUP ---------------- */
-    await Cart.deleteOne({ user: userId }).session(session);
+    /* ---------------- CLEAR CART (DON'T DELETE) ---------------- */
+    cartDoc.items = [];
+    await cartDoc.save({ session });
 
-    const notification = await Notification.create({
-      type: "order",
-      title: "New Order",
-      message: `Order ${order[0]._id} placed`,
-      link: `/admin/orders/${order[0]._id}`,
-    });
+    /* ---------------- NOTIFICATION ---------------- */
+    const notification = await Notification.create(
+      [
+        {
+          type: "order",
+          title: "New Order",
+          message: `Order ${order._id} placed`,
+          link: `/admin/orders/${order._id}`,
+        },
+      ],
+      { session }
+    );
 
-    io.emit("admin-notification", notification);
+    io.emit("admin-notification", notification[0]);
 
     await session.commitTransaction();
 
     res.status(201).json({
       success: true,
-      data: order[0],
+      data: order,
     });
   } catch (err) {
     await session.abortTransaction();
@@ -172,6 +174,7 @@ export const createOrder = async (req, res) => {
     session.endSession();
   }
 };
+
 
 
 export const checkStock = async (req, res) => {
@@ -297,3 +300,69 @@ export const cancelOrder = async (req, res) => {
 };
 
 
+
+export const generateInvoice = async (req, res) => {
+  const order = await Order.findById(req.params.orderId)
+    .populate("products.product")
+    .populate("address");
+
+  if (!order) {
+    return res.status(404).json({ message: "Order not found" });
+  }
+
+  const doc = new PDFDocument({ margin: 40 });
+
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename=invoice-${order._id}.pdf`
+  );
+  res.setHeader("Content-Type", "application/pdf");
+
+  doc.pipe(res);
+
+  // HEADER
+  doc.fontSize(20).text("INVOICE", { align: "center" });
+  doc.moveDown();
+
+  doc.fontSize(10);
+  doc.text(`Order ID: ${order._id}`);
+  doc.text(`Date: ${order.createdAt.toDateString()}`);
+  doc.text(`Payment: ${order.paymentMethod}`);
+  doc.moveDown();
+
+  // ADDRESS
+  doc.text("Bill To:", { underline: true });
+  doc.text(order.address.name);
+  doc.text(
+    `${order.address.house}, ${order.address.street}, ${order.address.city}`
+  );
+  doc.text(`${order.address.state} - ${order.address.pincode}`);
+  doc.moveDown();
+
+  // TABLE HEADER
+  doc.fontSize(11).text("Product", 40);
+  doc.text("Qty", 300);
+  doc.text("Price", 350);
+  doc.text("Total", 430);
+  doc.moveDown();
+
+  let total = 0;
+
+  order.products.forEach((item) => {
+    const price = item.variant.price * item.quantity;
+    total += price;
+
+    doc.text(item.product.name, 40);
+    doc.text(item.quantity.toString(), 300);
+    doc.text(`₹${item.variant.price}`, 350);
+    doc.text(`₹${price}`, 430);
+    doc.moveDown();
+  });
+
+  doc.moveDown();
+  doc.fontSize(12).text(`Grand Total: ₹${order.totalAmount}`, {
+    align: "right",
+  });
+
+  doc.end();
+};

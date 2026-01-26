@@ -14,10 +14,10 @@ import {
 const router = express.Router();
 
 /* ================= CART ================= */
-router.post("/cart/add", isAuthenticated, addToCart);
-router.get("/cart", isAuthenticated, getCart);
-router.patch("/cart/update", isAuthenticated, updateCartItem);
-router.delete("/cart/remove/:productId", isAuthenticated, removeCartItem);
+router.post("/add", isAuthenticated, addToCart);
+router.get("/", isAuthenticated, getCart);
+router.patch("/update", isAuthenticated, updateCartItem);
+router.delete("/remove/:productId", isAuthenticated, removeCartItem);
 
 /* ================= WISHLIST ================= */
 router.get("/wishlist", isAuthenticated, getWishlist);

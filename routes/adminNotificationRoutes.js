@@ -1,9 +1,7 @@
 import express from "express";
 import { protectAdmin } from "../middleware/adminMiddleware.js";
-import {
-  getAdminNotifications,
-  markNotificationRead,
-} from "../controllers/adminNotificationController.js";
+import { getAdminNotifications, markNotificationRead } from "../controllers/adminNotificationController.js";
+
 
 const router = express.Router();
 

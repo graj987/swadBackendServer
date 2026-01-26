@@ -1,10 +1,9 @@
-// controllers/shiprocketController.js
 import axios from "axios";
 import Order from "../models/order.js";
 import { getShiprocketToken } from "../utils/shiprocketClient.js";
 
 /* --------------------------------------------------
-  🔵 Helper: Safe API Call Wrapper
+  🔵 Helper: Shiprocket API Wrapper
 -------------------------------------------------- */
 const srAPI = async (method, url, data = null) => {
   const token = await getShiprocketToken();
@@ -14,7 +13,10 @@ const srAPI = async (method, url, data = null) => {
       method,
       url,
       data,
-      headers: { Authorization: `Bearer ${token}` }
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
     });
   } catch (err) {
     console.error("Shiprocket API Error:", err.response?.data || err.message);
@@ -28,11 +30,12 @@ const srAPI = async (method, url, data = null) => {
 export const createShiprocketOrder = async (req, res) => {
   try {
     const { orderId } = req.body;
+
     const order = await Order.findById(orderId).populate("products.product");
+    if (!order)
+      return res.status(404).json({ success: false, message: "Order not found" });
 
-    if (!order) return res.status(404).json({ success: false, message: "Order not found" });
-
-    if (order.shiprocketOrderId) {
+    if (order.shipping?.shiprocketOrderId) {
       return res.json({ success: true, message: "Already synced", order });
     }
 
@@ -40,7 +43,7 @@ export const createShiprocketOrder = async (req, res) => {
       name: p.product.name,
       sku: p.product._id.toString(),
       units: p.quantity,
-      selling_price: p.priceAtPurchase
+      selling_price: p.priceAtPurchase,
     }));
 
     const payload = {
@@ -49,7 +52,6 @@ export const createShiprocketOrder = async (req, res) => {
       pickup_location: process.env.SR_PICKUP || "Primary",
 
       billing_customer_name: order.address.name,
-      billing_last_name: "",
       billing_address: order.address.line1,
       billing_city: order.address.city,
       billing_pincode: order.address.pincode,
@@ -67,7 +69,7 @@ export const createShiprocketOrder = async (req, res) => {
       length: 10,
       breadth: 10,
       height: 10,
-      weight: 0.5
+      weight: 0.5,
     };
 
     const sr = await srAPI(
@@ -76,12 +78,16 @@ export const createShiprocketOrder = async (req, res) => {
       payload
     );
 
-    order.shiprocketOrderId = sr.data.order_id;
-    order.shipmentId = sr.data.shipment_id;
+    order.shipping = {
+      shiprocketOrderId: sr.data.order_id,
+      shipmentId: sr.data.shipment_id,
+      status: "created",
+      trackHistory: [],
+    };
+
     await order.save();
 
     res.json({ success: true, message: "Shiprocket order created", order });
-
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -95,72 +101,73 @@ export const generateAWB = async (req, res) => {
     const { orderId } = req.body;
 
     const order = await Order.findById(orderId);
-    if (!order) return res.status(404).json({ success: false, message: "Order not found" });
+    if (!order)
+      return res.status(404).json({ success: false, message: "Order not found" });
 
-    if (!order.shipmentId) {
+    if (!order.shipping?.shipmentId)
       return res.status(400).json({
         success: false,
-        message: "Create Shiprocket order first"
+        message: "Create Shiprocket order first",
       });
-    }
 
-    // First attempt — without courier_id
     let awbRes = await srAPI(
       "post",
       "https://apiv2.shiprocket.in/v1/external/courier/assign/awb",
-      { shipment_id: order.shipmentId }
+      { shipment_id: order.shipping.shipmentId }
     );
 
     let awb = awbRes.data?.awb_code;
 
-    // Some shipments require courier assignment explicitly
     if (!awb && awbRes.data?.courier_id) {
       awbRes = await srAPI(
         "post",
         "https://apiv2.shiprocket.in/v1/external/courier/assign/awb",
         {
-          shipment_id: order.shipmentId,
-          courier_id: awbRes.data.courier_id
+          shipment_id: order.shipping.shipmentId,
+          courier_id: awbRes.data.courier_id,
         }
       );
       awb = awbRes.data?.awb_code;
     }
 
-    if (!awb) throw new Error("Shiprocket did not return an AWB");
+    if (!awb) throw new Error("AWB generation failed");
 
-    order.awb = awb;
-    order.trackingUrl = `https://shiprocket.co/tracking/${awb}`;
+    order.shipping.awb = awb;
+    order.shipping.courierName = awbRes.data.courier_name || null;
+    order.shipping.courierId = awbRes.data.courier_id || null;
+    order.shipping.trackingUrl = `https://shiprocket.co/tracking/${awb}`;
+    order.shipping.status = "shipped";
+
+    order.orderStatus = "shipped";
+
     await order.save();
 
     res.json({ success: true, awb });
-
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
 };
 
 /* --------------------------------------------------
-  🔵 3) TRACK SHIPMENT
+  🔵 3) TRACK SHIPMENT (LIVE)
 -------------------------------------------------- */
 export const getTracking = async (req, res) => {
   try {
     const { awb } = req.params;
 
-    const response = await srAPI(
+    const sr = await srAPI(
       "get",
       `https://apiv2.shiprocket.in/v1/external/courier/track/awb/${awb}`
     );
 
-    res.json({ success: true, tracking: response.data });
-
-  } catch (err) {
+    res.json({ success: true, tracking: sr.data });
+  } catch {
     res.status(500).json({ success: false, message: "Tracking failed" });
   }
 };
 
 /* --------------------------------------------------
-  🔴 4) WEBHOOK HANDLER
-  (Set webhook URL in Shiprocket dashboard)
+  🔴 4) WEBHOOK HANDLER (REAL)
 -------------------------------------------------- */
 export const shiprocketWebhook = async (req, res) => {
   try {
@@ -169,65 +176,46 @@ export const shiprocketWebhook = async (req, res) => {
 
     if (!awb) return res.status(200).send("No AWB");
 
-    const order = await Order.findOne({ awb });
+    const order = await Order.findOne({ "shipping.awb": awb });
     if (!order) return res.status(200).send("Order not found");
 
     const status = (ev.current_status || ev.status || "").toLowerCase();
 
-    order.orderStatus = status;
-    order.statusHistory.push({ status, date: new Date() });
+    order.shipping.status = status;
+    order.shipping.trackHistory.push({
+      status,
+      location: ev.location || "",
+      date: new Date(),
+      message: ev.message || "",
+    });
+
+    if (status === "delivered") {
+      order.orderStatus = "delivered";
+    }
+
     await order.save();
 
     res.status(200).send("OK");
-
   } catch (err) {
-    res.status(500).send("Webhook Error");
+    console.error("Webhook error:", err);
+    res.status(500).send("Webhook error");
   }
 };
-export const generateLabel = async (req, res) => {
-  try {
-    const { orderId } = req.params;
 
-    const order = await Order.findById(orderId);
-    if (!order || !order.shipmentId)
-      return res.status(400).json({ success: false, message: "Shipment not found" });
-
-    const token = await getShiprocketToken();
-
-    const response = await axios.get(
-      `https://apiv2.shiprocket.in/v1/external/courier/generate/label?shipment_ids=${order.shipmentId}`,
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
-
-    const pdfUrl = response.data?.data?.label_url;
-
-    if (!pdfUrl)
-      return res.status(500).json({ success: false, message: "Label not generated" });
-
-    order.trackingUrl = pdfUrl;
-    await order.save();
-
-    res.json({ success: true, labelUrl: pdfUrl });
-  } catch (err) {
-    res.status(500).json({ success: false, message: "Label generation failed" });
-  }
-};
+/* --------------------------------------------------
+  🟣 5) GENERATE MANIFEST
+-------------------------------------------------- */
 export const generateManifest = async (req, res) => {
   try {
     const { shipmentId } = req.params;
-    const token = await getShiprocketToken();
 
-    const response = await axios.post(
+    const sr = await srAPI(
+      "post",
       "https://apiv2.shiprocket.in/v1/external/manifests/generate",
-      { shipment_id: shipmentId },
-      { headers: { Authorization: `Bearer ${token}` } }
+      { shipment_id: shipmentId }
     );
 
-    const manifestUrl = response.data?.manifest_url;
-    if (!manifestUrl)
-      return res.status(500).json({ success: false, message: "Manifest not available" });
-
-    res.json({ success: true, manifestUrl });
+    res.json({ success: true, manifestUrl: sr.data?.manifest_url });
   } catch {
     res.status(500).json({ success: false, message: "Manifest failed" });
   }

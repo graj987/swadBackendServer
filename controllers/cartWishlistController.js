@@ -106,10 +106,19 @@ export const updateCartItem = async (req, res) => {
 
 /* ================= REMOVE CART ITEM ================= */
 export const removeCartItem = async (req, res) => {
-  const { productId, weight } = req.params;
+  const { productId } = req.params;
+  const { weight } = req.body;
+
+  if (!weight) {
+    return res.status(400).json({ message: "Variant weight required" });
+  }
 
   const cart = await Cart.findOne({ user: req.user.id });
-  if (!cart) return res.status(404).json({ message: "Cart not found" });
+  if (!cart) {
+    return res.status(404).json({ message: "Cart not found" });
+  }
+
+  const initialLength = cart.items.length;
 
   cart.items = cart.items.filter(
     (i) =>
@@ -119,9 +128,15 @@ export const removeCartItem = async (req, res) => {
       )
   );
 
+  if (cart.items.length === initialLength) {
+    return res.status(404).json({ message: "Item not found in cart" });
+  }
+
   await cart.save();
+
   res.json({ success: true });
 };
+
 
 /* ================= TOGGLE WISHLIST ================= */
 export const toggleWishlist = async (req, res) => {
