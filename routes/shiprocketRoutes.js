@@ -1,28 +1,66 @@
 import express from "express";
-import { 
-  createShiprocketOrder, 
-  generateAWB, 
-  generateManifest, 
-  getTracking, 
-  shiprocketWebhook 
-} from "../controllers/shiprocketController.js";
+
+import {protectAdmin} from "../middleware/adminMiddleware.js";
 import { isAuthenticated } from "../middleware/auth.js";
+import { cancelShipmentController, createShipmentController, generateAWBController, generateLabelController, generateManifestController, shiprocketWebhookController} from "../controllers/shiprocketController.js";
+import { getLiveTracking } from "../services/shiprocketServices.js";
+
 
 const router = express.Router();
 
-// Create order inside Shiprocket
-router.post("/create-order", isAuthenticated, createShiprocketOrder);
+/* ---------------- ADMIN ONLY ---------------- */
 
-// Assign AWB
-router.post("/awb", isAuthenticated, generateAWB);
+// Create Shiprocket order
+router.post(
+  "/order/:orderId/create",
+  protectAdmin,
+  createShipmentController
+);
 
-// Get tracking
-router.get("/track/:awb", isAuthenticated, getTracking);
+// Assign courier + generate AWB
+router.post(
+  "/order/:orderId/awb",
+  protectAdmin,
+  generateAWBController
+);
 
-// Manifest
-router.get("/manifest/:shipmentId", isAuthenticated, generateManifest);
+// Generate manifest (BULK)
+router.post(
+  "/manifest",
+  protectAdmin,
+  generateManifestController
+);
 
-// Webhook (MUST start with /)
-router.post("/webhook", express.raw({ type: "application/json" }), shiprocketWebhook);
+/* ---------------- PUBLIC / USER ---------------- */
+
+// Track by AWB
+router.get(
+  "/track/:awb",
+  isAuthenticated,
+  getLiveTracking
+);
+
+/* ---------------- SHIPROCKET ---------------- */
+
+// Webhook (NO AUTH)
+router.post(
+  "/webhook",
+  express.json(),
+  shiprocketWebhookController
+);
+
+router.post(
+  "/order/:orderId/cancel",
+
+  protectAdmin,
+  cancelShipmentController
+);
+
+router.get(
+  "/label/:shipmentId",
+  protectAdmin,
+  generateLabelController
+);
+
 
 export default router;

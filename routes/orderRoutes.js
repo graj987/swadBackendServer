@@ -9,10 +9,10 @@ import {
   updateOrderStatus,
   cancelOrder,
   checkStock,
-  generateInvoice,
 } from "../controllers/orderController.js";
 import { isAuthenticated } from "../middleware/auth.js";
 import { getPricePreview } from "../controllers/pricePreviewController.js";
+import { generateInvoice } from "../controllers/generateInvoice.js";
 
 const router = express.Router();
 
@@ -26,6 +26,7 @@ router.put("/update/:id", isAuthenticated, updateOrderStatus);
 router.put("/cancel/:id", isAuthenticated, cancelOrder);
 router.post("/price-preview", isAuthenticated, getPricePreview);
 router.post("/check-stock", isAuthenticated, checkStock);
+
 router.get(
   "/:orderId/invoice",
   isAuthenticated,

@@ -1,23 +1,24 @@
-// utils/shiprocketClient.js
 import axios from "axios";
 
-let token = null;
+let cachedToken = null;
 let tokenExpiry = null;
 
 export const getShiprocketToken = async () => {
-  const now = Date.now();
-
-  if (token && tokenExpiry && now < tokenExpiry) {
-    return token;
+  if (cachedToken && tokenExpiry > Date.now()) {
+    return cachedToken;
   }
 
-  const res = await axios.post("https://apiv2.shiprocket.in/v1/external/auth/login", {
-    email: process.env.SR_EMAIL,
-    password: process.env.SR_PASSWORD
-  });
+  const res = await axios.post(
+    `${process.env.SHIPROCKET_BASE}/auth/login`,
+    {
+      email: process.env.SHIPROCKET_EMAIL,
+      password: process.env.SHIPROCKET_PASSWORD,
+    }
+  );
 
-  token = res.data.token;
-  tokenExpiry = now + 8 * 60 * 60 * 1000; // 8 hours
+  cachedToken = res.data.token;
+  tokenExpiry = Date.now() + 23 * 60 * 60 * 1000; // 23 hrs
 
-  return token;
+  return cachedToken;
 };
+

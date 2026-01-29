@@ -1,4 +1,3 @@
-
 import mongoose from "mongoose";
 import Product from "../models/productModel.js";
 import Order from "../models/order.js";
@@ -7,11 +6,9 @@ import { User } from "../models/userModel.js";
 import { calculateDeliveryCharge } from "../utils/deliveryCharge.js";
 import { syncOrderWithShiprocket } from "../utils/syncOrder.js";
 import Notification from "../models/notification.js";
-import {io} from "../server.js";
-import PDFDocument from "pdfkit";
+import { io } from "../server.js";
+
 import Cart from "../models/cart.js";
-
-
 
 /* ================= CREATE ORDER ================= */
 export const createOrder = async (req, res) => {
@@ -36,7 +33,6 @@ export const createOrder = async (req, res) => {
       throw { status: 400, message: "Cart is empty" };
     }
 
-    /* ---------------- ADDRESS ---------------- */
     const address = await Address.findOne({ _id: addressId, userId })
       .session(session)
       .lean();
@@ -45,12 +41,35 @@ export const createOrder = async (req, res) => {
       throw { status: 404, message: "Address not found" };
     }
 
+    if (!address) {
+      throw { status: 404, message: "Address not found" };
+    }
+
+    // 🔒 PINCODE VALIDATION (STRICT)
+    const pincode = String(address.pincode).replace(/\D/g, "");
+    if (pincode.length !== 6) {
+      throw {
+        status: 400,
+        message: "Invalid pincode. Pincode must be 6 digits.",
+      };
+    }
+
+    // 🔒 STATE VALIDATION
+    if (!address.state || !address.state.trim()) {
+      throw {
+        status: 400,
+        message: "State is required for delivery",
+      };
+    }
+
     const formattedAddress = {
-      name: address.name,
+      name: address.name.trim(),
       phone: address.phone,
       line1: `${address.house}, ${address.street}`,
-      city: address.city,
-      pincode: address.pincode,
+      city: address.city.trim(),
+      state: address.state.trim(), // ✅ ADDED
+      pincode, // ✅ CLEANED PINCODE
+      country: "India",
     };
 
     /* ---------------- PAYMENT ---------------- */
@@ -76,7 +95,7 @@ export const createOrder = async (req, res) => {
       }
 
       const variant = product.variants.find(
-        (v) => v.weight === item.variant.weight
+        (v) => v.weight === item.variant.weight,
       );
 
       if (!variant) {
@@ -134,7 +153,7 @@ export const createOrder = async (req, res) => {
           paymentStatus: paymentMethod === "COD" ? "pending" : "initiated",
         },
       ],
-      { session }
+      { session },
     );
 
     /* ---------------- CLEAR CART (DON'T DELETE) ---------------- */
@@ -151,7 +170,7 @@ export const createOrder = async (req, res) => {
           link: `/admin/orders/${order._id}`,
         },
       ],
-      { session }
+      { session },
     );
 
     io.emit("admin-notification", notification[0]);
@@ -175,18 +194,21 @@ export const createOrder = async (req, res) => {
   }
 };
 
-
-
 export const checkStock = async (req, res) => {
   try {
     const { productId, quantity } = req.body;
 
-    if (!productId) return res.status(400).json({ success: false, message: "Product ID required" });
+    if (!productId)
+      return res
+        .status(400)
+        .json({ success: false, message: "Product ID required" });
 
     const product = await Product.findById(productId);
 
     if (!product) {
-      return res.status(404).json({ success: false, message: "Product not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Product not found" });
     }
 
     if (product.stock < quantity) {
@@ -198,12 +220,12 @@ export const checkStock = async (req, res) => {
     }
 
     return res.json({ success: true, message: "Stock available" });
-
   } catch (err) {
-    return res.status(500).json({ success: false, message: "Stock check error" });
+    return res
+      .status(500)
+      .json({ success: false, message: "Stock check error" });
   }
 };
-
 
 export const getMyOrders = async (req, res) => {
   try {
@@ -271,7 +293,6 @@ export const updateOrderStatus = async (req, res) => {
   res.json({ success: true, data: order });
 };
 
-
 export const cancelOrder = async (req, res) => {
   const order = await Order.findOne({
     _id: req.params.id,
@@ -297,72 +318,4 @@ export const cancelOrder = async (req, res) => {
   await order.save();
 
   res.json({ success: true, message: "Order cancelled" });
-};
-
-
-
-export const generateInvoice = async (req, res) => {
-  const order = await Order.findById(req.params.orderId)
-    .populate("products.product")
-    .populate("address");
-
-  if (!order) {
-    return res.status(404).json({ message: "Order not found" });
-  }
-
-  const doc = new PDFDocument({ margin: 40 });
-
-  res.setHeader(
-    "Content-Disposition",
-    `attachment; filename=invoice-${order._id}.pdf`
-  );
-  res.setHeader("Content-Type", "application/pdf");
-
-  doc.pipe(res);
-
-  // HEADER
-  doc.fontSize(20).text("INVOICE", { align: "center" });
-  doc.moveDown();
-
-  doc.fontSize(10);
-  doc.text(`Order ID: ${order._id}`);
-  doc.text(`Date: ${order.createdAt.toDateString()}`);
-  doc.text(`Payment: ${order.paymentMethod}`);
-  doc.moveDown();
-
-  // ADDRESS
-  doc.text("Bill To:", { underline: true });
-  doc.text(order.address.name);
-  doc.text(
-    `${order.address.house}, ${order.address.street}, ${order.address.city}`
-  );
-  doc.text(`${order.address.state} - ${order.address.pincode}`);
-  doc.moveDown();
-
-  // TABLE HEADER
-  doc.fontSize(11).text("Product", 40);
-  doc.text("Qty", 300);
-  doc.text("Price", 350);
-  doc.text("Total", 430);
-  doc.moveDown();
-
-  let total = 0;
-
-  order.products.forEach((item) => {
-    const price = item.variant.price * item.quantity;
-    total += price;
-
-    doc.text(item.product.name, 40);
-    doc.text(item.quantity.toString(), 300);
-    doc.text(`₹${item.variant.price}`, 350);
-    doc.text(`₹${price}`, 430);
-    doc.moveDown();
-  });
-
-  doc.moveDown();
-  doc.fontSize(12).text(`Grand Total: ₹${order.totalAmount}`, {
-    align: "right",
-  });
-
-  doc.end();
 };

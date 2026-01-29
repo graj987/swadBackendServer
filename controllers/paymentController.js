@@ -21,9 +21,6 @@ const razorpay = new Razorpay({
   key_secret: RZ_KEY_SECRET,
 });
 
-/* ============================================================
-   HELPER → Refund (full or partial)
-============================================================ */
 async function refundPayment(paymentId, amountPaise = null) {
   try {
     if (amountPaise) {
@@ -36,14 +33,13 @@ async function refundPayment(paymentId, amountPaise = null) {
   }
 }
 
-/* ============================================================
-   1️⃣ CREATE RAZORPAY ORDER
-============================================================ */
 export const createRazorpayOrder = async (req, res) => {
   try {
     const { orderId } = req.body;
     if (!orderId)
-      return res.status(400).json({ ok: false, message: "orderId is required" });
+      return res
+        .status(400)
+        .json({ ok: false, message: "orderId is required" });
 
     const order = await Order.findById(orderId);
     if (!order)
@@ -68,114 +64,125 @@ export const createRazorpayOrder = async (req, res) => {
   }
 };
 
-/* ============================================================
-   2️⃣ VERIFY PAYMENT (CALLED BY FRONTEND)
-============================================================ */
 export const verifyPayment = async (req, res) => {
+  const session = await mongoose.startSession();
+
   try {
+    session.startTransaction();
+
     const { razorpay_payment_id, razorpay_order_id, razorpay_signature } =
       req.body;
 
     if (!razorpay_payment_id || !razorpay_order_id || !razorpay_signature) {
-      return res.status(400).json({ ok: false, message: "Missing fields" });
+      throw new Error("Missing payment fields");
     }
 
-    // verify signature
-    const generatedSignature = crypto
+    /* ---------------- SIGNATURE VERIFY ---------------- */
+    const expected = crypto
       .createHmac("sha256", RZ_KEY_SECRET)
-      .update(razorpay_order_id + "|" + razorpay_payment_id)
+      .update(`${razorpay_order_id}|${razorpay_payment_id}`)
       .digest("hex");
 
-    if (generatedSignature !== razorpay_signature) {
-      return res.status(400).json({ ok: false, message: "Invalid signature" });
+    if (expected !== razorpay_signature) {
+      throw new Error("Invalid Razorpay signature");
     }
 
-    // fetch authoritative payment data
-    const paymentResp = await axios.get(
+    /* ---------------- FETCH PAYMENT ---------------- */
+    const { data: p } = await axios.get(
       `https://api.razorpay.com/v1/payments/${razorpay_payment_id}`,
-      {
-        auth: { username: RZ_KEY_ID, password: RZ_KEY_SECRET },
-      }
+      { auth: { username: RZ_KEY_ID, password: RZ_KEY_SECRET } },
     );
 
-    const p = paymentResp.data;
-
-    // persist payment to DB
-    const savedPayment = await Payment.createOrUpdateFromRazorpay(p, {
-      signatureVerified: true,
-      ip: req.ip,
-      userAgent: req.get("User-Agent"),
-    });
-
-    // find corresponding order
-    const order = await Order.findOne({ razorpay_order_id });
-
-    if (!order) {
-      return res.status(404).json({ ok: false, message: "Order not found" });
+    if (p.status !== "captured") {
+      throw new Error("Payment not captured");
     }
 
-    // India-only enforcement
-    if (p.currency.toUpperCase() !== "INR") {
+    /* ---------------- ORDER ---------------- */
+    const order = await Order.findOne({ razorpay_order_id }).session(session);
+    if (!order) throw new Error("Order not found");
+
+    // Idempotency
+    if (order.paymentStatus === "paid") {
+      await session.commitTransaction();
+      return res.json({ ok: true, alreadyProcessed: true });
+    }
+
+    /* ---------------- AMOUNT CHECK ---------------- */
+    if (p.amount !== order.totalAmount * 100) {
       order.paymentStatus = "failed";
-      await order.save();
-
-      try {
-        await refundPayment(razorpay_payment_id);
-      } catch (e) {
-        console.error("Auto refund failed:", e);
-      }
-
-      return res.json({
-        ok: false,
-        reason: "non-INR",
-        refunded: true,
-      });
+      await order.save({ session });
+      await refundPayment(razorpay_payment_id);
+      throw new Error("Amount mismatch");
     }
 
-    // blocked foreign cards
-    if (p.method === "card") {
-      const country = p.card?.country?.toUpperCase();
-      if (country && country !== "IN") {
-        order.paymentStatus = "failed";
-        await order.save();
-
-        try {
-          await refundPayment(razorpay_payment_id);
-        } catch (e) {
-          console.error("Refund foreign card:", e);
-        }
-
-        return res.json({
-          ok: false,
-          reason: "non-Indian-card",
-          refunded: true,
-        });
-      }
+    /* ---------------- CURRENCY + CARD CHECK ---------------- */
+    if (p.currency !== "INR") {
+      order.paymentStatus = "failed";
+      await order.save({ session });
+      await refundPayment(razorpay_payment_id);
+      throw new Error("Non-INR payment blocked");
     }
 
-    // Accept payment
+    if (p.method === "card" && p.card?.country !== "IN") {
+      order.paymentStatus = "failed";
+      await order.save({ session });
+      await refundPayment(razorpay_payment_id);
+      throw new Error("Foreign card blocked");
+    }
+
+    /* ---------------- MARK SUCCESS ---------------- */
     order.paymentStatus = "paid";
     order.orderStatus = "preparing";
     order.razorpay_payment_id = p.id;
     order.paymentDetails = p;
 
-    await order.save();
+    order.statusHistory.push({
+      status: "paid",
+      date: new Date(),
+    });
 
+    await order.save({ session });
+
+    /* ---------------- LINK PAYMENT ---------------- */
     await Payment.findOneAndUpdate(
       { razorpay_payment_id },
-      { $set: { order: order._id } }
+      {
+        $set: {
+          order: order._id,
+          signatureVerified: true,
+          ip: req.headers["x-forwarded-for"] || req.ip,
+          userAgent: req.get("User-Agent"),
+        },
+      },
+      { session },
     );
 
-    return res.json({ ok: true, orderId: order._id, payment: savedPayment });
+    await createShiprocketOrder(order._id)
+      .then(() => console.log("Shiprocket order auto-created"))
+      .catch((err) =>
+        console.error("Shiprocket auto-create failed:", err.message),
+      );
+
+    await session.commitTransaction();
+
+    return res.json({
+      ok: true,
+      orderId: order._id,
+      shipmentCreated: true,
+    });
   } catch (err) {
-    console.error("verifyPayment:", err);
-    return res.status(500).json({ ok: false, error: err.message });
+    await session.abortTransaction();
+    console.error("verifyPayment:", err.message);
+
+    return res.status(500).json({
+      ok: false,
+      message: err.message,
+    });
+  } finally {
+    session.endSession();
   }
 };
 
-/* ============================================================
-   3️⃣ WEBHOOK HANDLER (MOST IMPORTANT — AUTHORITATIVE)
-============================================================ */
 export const webhookHandler = async (req, res) => {
   try {
     const signature = req.headers["x-razorpay-signature"];

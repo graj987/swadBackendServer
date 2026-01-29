@@ -19,7 +19,11 @@ import adminOrderRoutes from "./routes/adminOrderRoutes.js";
 import cartWishlistRoutes from "./routes/cartWishlistRoutes.js";
 import addressRoutes from "./routes/addressRoutes.js";
 import notificationadmin from "./routes/adminNotificationRoutes.js";
-import { shiprocketWebhook } from "./controllers/shiprocketController.js";
+import brandRoutes from "./routes/brandRoutes.js";
+import offerRoutes from "./routes/offerRoutes.js";
+import Offer from "./models/offer.js";
+import adminBlogRoutes from "./routes/adminBlogRoutes.js";
+import blogRoutes from "./routes/blogRoutes.js";
 
 connectDB();
 
@@ -68,13 +72,15 @@ app.use("/api/cod", codRoutes);
 app.use("/api/admin/orders", adminOrderRoutes);
 app.use("/api/cart", cartWishlistRoutes);
 app.use("/api/admin/notification", notificationadmin );
+app.use("/api/offers", offerRoutes);
+app.use("/api/instagram", brandRoutes);
+app.use("/api/blogs", blogRoutes);          
+app.use("/api/admin/blogs", adminBlogRoutes);
 
-/* ================= SHIPROCKET WEBHOOK ================= */
-app.post(
-  "/api/shiprocket/webhook",
-  express.raw({ type: "application/json" }),
-  shiprocketWebhook
-);
+
+
+
+
 
 /* ================= ERROR HANDLER ================= */
 app.use((err, req, res, next) => {
@@ -85,6 +91,18 @@ app.use((err, req, res, next) => {
     error: err.message,
   });
 });
+
+setInterval(async () => {
+  try {
+    const now = new Date();
+    await Offer.updateMany(
+      { endTime: { $lt: now }, isActive: true },
+      { isActive: false }
+    );
+  } catch (err) {
+    console.error("Offer auto-expire error:", err);
+  }
+}, 60 * 1000);
 
 /* ================= START SERVER ================= */
 const PORT = process.env.PORT || 5000;

@@ -12,7 +12,7 @@ cloudinary.v2.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-// Upload file buffer to cloudinary
+
 const uploadBufferToCloudinary = (buffer, folder = "products") =>
   new Promise((resolve, reject) => {
     const uploadStream = cloudinary.v2.uploader.upload_stream(
@@ -25,20 +25,13 @@ const uploadBufferToCloudinary = (buffer, folder = "products") =>
     streamifier.createReadStream(buffer).pipe(uploadStream);
   });
 
-// --------------------------------------------------------
-// TOKEN GENERATION
-// --------------------------------------------------------
+
 const generateToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET, {
     expiresIn: "30d",
   });
 };
 
-// --------------------------------------------------------
-// ADMIN AUTH
-// --------------------------------------------------------
-
-// Register admin
 export const registerAdmin = async (req, res) => {
   try {
     const { name, email, password } = req.body;
@@ -71,7 +64,7 @@ export const registerAdmin = async (req, res) => {
   }
 };
 
-// Login admin
+
 export const loginAdmin = async (req, res) => {
   try {
     let { email, password } = req.body;
@@ -105,7 +98,7 @@ export const loginAdmin = async (req, res) => {
   }
 };
 
-// Verify admin token
+
 export const verifyAdmin = async (req, res) => {
   try {
     const token = req.headers.authorization?.split(" ")[1];
@@ -123,9 +116,6 @@ export const verifyAdmin = async (req, res) => {
   }
 };
 
-// --------------------------------------------------------
-// PRODUCT MANAGEMENT
-// --------------------------------------------------------
 
 export const addProduct = async (req, res) => {
   try {
@@ -138,7 +128,7 @@ export const addProduct = async (req, res) => {
       stock,
     } = req.body;
 
-    // 🔒 Basic validation
+ 
     if (!name || !description || !category) {
       return res.status(400).json({
         success: false,
