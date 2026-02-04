@@ -37,7 +37,7 @@ const addressSchema = new mongoose.Schema(
     phone: { type: String, required: true },
     line1: { type: String, required: true },
     city: { type: String, required: true },
-    state: { type: String},
+    state: { type: String },
     pincode: { type: String, required: true },
     country: { type: String, default: "India" },
   },
@@ -122,7 +122,7 @@ const orderSchema = new mongoose.Schema(
       default: {},
     },
 
-    /* ORDER STATUS (BUSINESS) */
+    /* ORDER STATUS */
     orderStatus: {
       type: String,
       enum: ORDER_STATUSES,
@@ -172,14 +172,82 @@ const orderSchema = new mongoose.Schema(
         },
       ],
     },
+
+    /* ================= ADDED: ANALYTICS HELPERS ================= */
+
+    orderNumber: {
+      type: String,
+      unique: true,
+      index: true,
+    },
+
+    orderMonth: {
+      type: Number, // 1–12
+      index: true,
+    },
+
+    orderYear: {
+      type: Number,
+      index: true,
+    },
+
+    /* ================= ADDED: REVENUE FLAGS ================= */
+
+    isPaidOrder: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+
+    isRevenueCounted: {
+      type: Boolean,
+      default: false,
+    },
+
+    /* ================= ADDED: REFUND ================= */
+
+    refund: {
+      isRefunded: { type: Boolean, default: false },
+      refundAmount: { type: Number, default: 0 },
+      refundReason: String,
+      refundedAt: Date,
+    },
+
+    /* ================= ADDED: ADMIN ================= */
+
+    createdByAdmin: {
+      type: Boolean,
+      default: false,
+    },
+
+    adminNotes: {
+      type: String,
+      default: "",
+    },
+
+    /* ================= ADDED: CONVERSION TRACKING ================= */
+
+    trafficSource: {
+      type: String, // google, instagram, direct
+    },
+
+    sessionId: {
+      type: String,
+    },
   },
   { timestamps: true }
 );
 
 /* ================= INDEXES ================= */
 
-// Required for fast webhook lookups
+// Existing
 orderSchema.index({ "shipping.awb": 1 });
+
+// Added for dashboard performance
+orderSchema.index({ createdAt: -1 });
+orderSchema.index({ orderStatus: 1 });
+orderSchema.index({ paymentStatus: 1 });
+orderSchema.index({ orderMonth: 1, orderYear: 1 });
 
 /* ================= EXPORT ================= */
 

@@ -18,7 +18,12 @@ export const createOrder = async (req, res) => {
     session.startTransaction();
 
     const userId = req.user.id;
-    const { addressId, paymentMethod = "COD" } = req.body;
+    const {
+      addressId,
+      paymentMethod = "COD",
+      trafficSource, // ✅ ADDED
+      sessionId, // ✅ ADDED
+    } = req.body;
 
     if (!userId) {
       throw { status: 401, message: "Unauthorized" };
@@ -41,25 +46,14 @@ export const createOrder = async (req, res) => {
       throw { status: 404, message: "Address not found" };
     }
 
-    if (!address) {
-      throw { status: 404, message: "Address not found" };
-    }
-
-    // 🔒 PINCODE VALIDATION (STRICT)
+    /* ---------------- ADDRESS VALIDATION ---------------- */
     const pincode = String(address.pincode).replace(/\D/g, "");
     if (pincode.length !== 6) {
-      throw {
-        status: 400,
-        message: "Invalid pincode. Pincode must be 6 digits.",
-      };
+      throw { status: 400, message: "Invalid pincode" };
     }
 
-    // 🔒 STATE VALIDATION
     if (!address.state || !address.state.trim()) {
-      throw {
-        status: 400,
-        message: "State is required for delivery",
-      };
+      throw { status: 400, message: "State is required for delivery" };
     }
 
     const formattedAddress = {
@@ -67,8 +61,8 @@ export const createOrder = async (req, res) => {
       phone: address.phone,
       line1: `${address.house}, ${address.street}`,
       city: address.city.trim(),
-      state: address.state.trim(), // ✅ ADDED
-      pincode, // ✅ CLEANED PINCODE
+      state: address.state.trim(),
+      pincode,
       country: "India",
     };
 
@@ -89,20 +83,14 @@ export const createOrder = async (req, res) => {
 
     for (const item of cartDoc.items) {
       const product = await Product.findById(item.product).session(session);
-
-      if (!product) {
-        throw { status: 400, message: "Invalid product in cart" };
-      }
+      if (!product) throw { status: 400, message: "Invalid product in cart" };
 
       const variant = product.variants.find(
         (v) => v.weight === item.variant.weight,
       );
 
       if (!variant) {
-        throw {
-          status: 400,
-          message: `Variant ${item.variant.weight} not available`,
-        };
+        throw { status: 400, message: "Variant not available" };
       }
 
       if (variant.stock < item.quantity) {
@@ -112,19 +100,14 @@ export const createOrder = async (req, res) => {
         };
       }
 
-      // ✅ Deduct stock safely
       variant.stock -= item.quantity;
       await product.save({ session });
 
-      const itemTotal = item.quantity * variant.price;
-      subtotal += itemTotal;
+      subtotal += item.quantity * variant.price;
 
       orderItems.push({
         product: product._id,
-        variant: {
-          weight: variant.weight,
-          price: variant.price,
-        },
+        variant: { weight: variant.weight },
         quantity: item.quantity,
         priceAtPurchase: variant.price,
       });
@@ -136,6 +119,9 @@ export const createOrder = async (req, res) => {
     const codCharge = paymentMethod === "COD" ? 20 : 0;
     const totalAmount = subtotal + tax + deliveryCharge + codCharge;
 
+    /* ---------------- ANALYTICS HELPERS ---------------- */
+    const now = new Date();
+
     /* ---------------- CREATE ORDER ---------------- */
     const [order] = await Order.create(
       [
@@ -143,46 +129,74 @@ export const createOrder = async (req, res) => {
           user: userId,
           items: orderItems,
           address: formattedAddress,
+
           subtotal,
           tax,
           deliveryCharge,
           codCharge,
           totalAmount,
+
           paymentMethod,
-          orderStatus: "placed",
           paymentStatus: paymentMethod === "COD" ? "pending" : "initiated",
+          orderStatus: "placed",
+
+          // ✅ ADDED
+          orderNumber: `ORD-${Date.now()}`,
+          orderMonth: now.getMonth() + 1,
+          orderYear: now.getFullYear(),
+
+          // ✅ Revenue flags
+          isPaidOrder: paymentMethod === "Online" ? false : false,
+          isRevenueCounted: false,
+
+          // ✅ Conversion tracking
+          trafficSource: trafficSource || "direct",
+          sessionId: sessionId || null,
+
+          // ✅ Status history init
+          statusHistory: [{ status: "placed", date: now }],
         },
       ],
       { session },
     );
 
-    /* ---------------- CLEAR CART (DON'T DELETE) ---------------- */
+    /* ---------------- CLEAR CART ---------------- */
     cartDoc.items = [];
     await cartDoc.save({ session });
 
+    /* ---------------- CONVERSION UPDATE ---------------- */
+    if (sessionId) {
+      await TrafficLog.updateMany(
+        { sessionId, converted: false },
+        {
+          converted: true,
+          convertedAt: new Date(),
+        },
+      );
+    }
+
     /* ---------------- NOTIFICATION ---------------- */
-    const notification = await Notification.create(
+
+    const [notification] = await Notification.create(
       [
         {
           type: "order",
           title: "New Order",
-          message: `Order ${order._id} placed`,
+          message: `Order ${order.orderNumber} placed`,
           link: `/admin/orders/${order._id}`,
         },
       ],
       { session },
     );
 
-    io.emit("admin-notification", notification[0]);
+    io.emit("admin-notification", notification);
 
     await session.commitTransaction();
 
-    res.status(201).json({
-      success: true,
-      data: order,
-    });
+    res.status(201).json({ success: true, data: order });
   } catch (err) {
     await session.abortTransaction();
+
     console.error("Create order error:", err);
 
     res.status(err.status || 500).json({
