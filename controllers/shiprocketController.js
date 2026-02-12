@@ -55,9 +55,11 @@ export const generateAWBController = async (req, res) => {
 
     res.json({ success: true, awb });
   } catch (err) {
-    console.error("Generate AWB Error:", err.message);
-    res.status(500).json({ success: false, message: err.message });
-  }
+  console.error("❌ SHIPROCKET AWB ERROR:");
+  console.error(err.response?.data || err.message);
+  throw err;
+}
+
 };
 
 /* -------------------------------------------------- */
