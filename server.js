@@ -24,7 +24,7 @@ import offerRoutes from "./routes/offerRoutes.js";
 import Offer from "./models/offer.js";
 import adminBlogRoutes from "./routes/adminBlogRoutes.js";
 import blogRoutes from "./routes/blogRoutes.js";
-
+console.log("🔥 USING shiprocketServices.js FROM:", import.meta.url);
 connectDB();
 
 const app = express();

@@ -1,13 +1,10 @@
 import axios from "axios";
 
 let cachedToken = null;
-let tokenExpiry = null;
+let tokenExpiry = 0;
+let refreshingPromise = null;
 
-export const getShiprocketToken = async () => {
-  if (cachedToken && tokenExpiry > Date.now()) {
-    return cachedToken;
-  }
-
+const login = async () => {
   const res = await axios.post(
     `${process.env.SHIPROCKET_BASE}/auth/login`,
     {
@@ -17,8 +14,34 @@ export const getShiprocketToken = async () => {
   );
 
   cachedToken = res.data.token;
-  tokenExpiry = Date.now() + 23 * 60 * 60 * 1000; // 23 hrs
+
+  // Shiprocket tokens officially live 24h — refresh earlier
+  tokenExpiry = Date.now() + 22 * 60 * 60 * 1000;
 
   return cachedToken;
 };
 
+export const getShiprocketToken = async () => {
+  // valid token → return
+  if (cachedToken && Date.now() < tokenExpiry) {
+    return cachedToken;
+  }
+
+  // if refresh already running → wait for it
+  if (refreshingPromise) {
+    return refreshingPromise;
+  }
+
+  // start refresh once
+  refreshingPromise = login()
+    .catch((err) => {
+      cachedToken = null;
+      tokenExpiry = 0;
+      throw new Error("Shiprocket authentication failed");
+    })
+    .finally(() => {
+      refreshingPromise = null;
+    });
+
+  return refreshingPromise;
+};

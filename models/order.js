@@ -138,40 +138,59 @@ const orderSchema = new mongoose.Schema(
 
     /* ================= SHIPPING (SHIPROCKET) ================= */
 
-    shipping: {
-      shiprocketOrderId: { type: String, default: null },
-      shipmentId: { type: String, default: null },
-      awb: { type: String, default: null },
+   shipping: {
+  shipmentId: { type: String, default: null },
+  awb: { type: String, default: null },
 
-      courierName: { type: String, default: null },
-      courierId: { type: String, default: null },
+  courierName: { type: String, default: null },
+  courierId: { type: String, default: null },
 
-      trackingUrl: { type: String, default: null },
+  status: {
+    type: String,
+    enum: [
+      "not_created",
+      "created",
+      "awb_assigned",
+      "pickup_scheduled",
+      "shipped",
+      "in_transit",
+      "out_for_delivery",
+      "delivered",
+      "rto",
+      "cancelled",
+      "failed"
+    ],
+    default: "not_created",
+  },
 
-      status: {
-        type: String,
-        enum: [
-          "created",
-          "pickup_scheduled",
-          "shipped",
-          "in_transit",
-          "out_for_delivery",
-          "delivered",
-          "rto",
-          "cancelled",
-        ],
-        default: null,
-      },
+  package: {
+    weight: Number,
+    length: Number,
+    breadth: Number,
+    height: Number,
+  },
 
-      trackHistory: [
-        {
-          status: String,
-          location: String,
-          date: { type: Date, default: Date.now },
-          message: String,
-        },
-      ],
+  labelUrl: String,
+  manifestUrl: String,
+  invoiceUrl: String,
+
+  lastError: {
+    message: String,
+    code: String,
+    date: Date,
+  },
+
+  trackHistory: [
+    {
+      status: String,
+      location: String,
+      message: String,
+      raw: Object,
+      date: { type: Date, default: Date.now },
     },
+  ],
+},
+
 
     /* ================= ADDED: ANALYTICS HELPERS ================= */
 
