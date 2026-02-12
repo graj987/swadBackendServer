@@ -7,6 +7,7 @@ import { calculateDeliveryCharge } from "../utils/deliveryCharge.js";
 import { syncOrderWithShiprocket } from "../utils/syncOrder.js";
 import Notification from "../models/notification.js";
 import { io } from "../server.js";
+import TrafficLog from "../models/TraficLog.js";
 
 import Cart from "../models/cart.js";
 
@@ -80,6 +81,7 @@ export const createOrder = async (req, res) => {
     /* ---------------- PRICE + STOCK ---------------- */
     let subtotal = 0;
     const orderItems = [];
+    let isDealOrder = false;
 
     for (const item of cartDoc.items) {
       const product = await Product.findById(item.product).session(session);
@@ -100,16 +102,30 @@ export const createOrder = async (req, res) => {
         };
       }
 
+      /* 🔥 DEAL PRICE LOGIC (CRITICAL) */
+      let finalPrice = variant.price;
+
+      if (
+        product.isDealActive &&
+        product.deal?.discountPercent &&
+        finalPrice < variant.price
+      ) {
+        isDealOrder = true;
+      }
+
+      /* STOCK UPDATE */
       variant.stock -= item.quantity;
       await product.save({ session });
 
-      subtotal += item.quantity * variant.price;
+      /* SUBTOTAL */
+      subtotal += item.quantity * finalPrice;
 
+      /* LOCK PRICE AT PURCHASE */
       orderItems.push({
         product: product._id,
         variant: { weight: variant.weight },
         quantity: item.quantity,
-        priceAtPurchase: variant.price,
+        priceAtPurchase: finalPrice, // 🔒 IMPORTANT
       });
     }
 
@@ -146,6 +162,7 @@ export const createOrder = async (req, res) => {
           orderYear: now.getFullYear(),
 
           // ✅ Revenue flags
+          isDealOrder,
           isPaidOrder: paymentMethod === "Online" ? false : false,
           isRevenueCounted: false,
 
@@ -164,17 +181,13 @@ export const createOrder = async (req, res) => {
     cartDoc.items = [];
     await cartDoc.save({ session });
 
-    /* ---------------- CONVERSION UPDATE ---------------- */
-    if (sessionId) {
-      await TrafficLog.updateMany(
-        { sessionId, converted: false },
-        {
-          converted: true,
-          convertedAt: new Date(),
-        },
-      );
-    }
-
+    await TrafficLog.updateMany(
+      { sessionId, converted: false },
+      {
+        converted: true,
+        convertedAt: new Date(),
+      },
+    );
     /* ---------------- NOTIFICATION ---------------- */
 
     const [notification] = await Notification.create(

@@ -38,17 +38,6 @@ export const getProductHero = async (req, res) => {
   }
 };
 
-
-export const featuredProducts = async (req, res) => {
-  try {
-    const products = await Product.find({ featured: true });
-    res.json(products);
-  } catch (error) {
-    res.status(500).json({ message: "Error fetching featured products" });
-  } 
-};
-
-
 export const getProductById = async (req, res) => {
   try {
     const product = await Product.findById(req.params.id);
@@ -59,7 +48,6 @@ export const getProductById = async (req, res) => {
     res.status(500).json({ message: "Error fetching product" });
   }
 };
-
 
 export const getProductsCount = async (req, res) => {
   try {
@@ -95,12 +83,150 @@ export const searchProducts = async (req, res) => {
   }
 };
 
-export const whishlist = async (req, res)=>{
+export const toggleFeaturedProduct = async (req, res) => {
   try {
-    
-    
-  } catch (error) {
-    
-  }
+    const product = await Product.findById(req.params.id);
 
-}
+    if (!product) {
+      return res.status(404).json({ message: "Product not found" });
+    }
+
+    product.isFeatured = !product.isFeatured;
+    await product.save();
+
+    res.json({
+      success: true,
+      isFeatured: product.isFeatured,
+    });
+  } catch (err) {
+    res.status(500).json({ message: "Failed to update featured status" });
+  }
+};
+
+export const setDealOfTheDay = async (req, res) => {
+  try {
+    const { discountPercent, startAt, endAt } = req.body;
+
+    if (!discountPercent || !startAt || !endAt) {
+      return res.status(400).json({ message: "Invalid deal data" });
+    }
+
+    if (new Date(startAt) >= new Date(endAt)) {
+      return res.status(400).json({ message: "End date must be after start date" });
+    }
+
+    const product = await Product.findById(req.params.id);
+
+    if (!product) {
+      return res.status(404).json({ message: "Product not found" });
+    }
+
+    product.deal = {
+      isActive: true,
+      discountPercent,
+      startAt,
+      endAt,
+    };
+
+    await product.save();
+
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ message: "Failed to set deal" });
+  }
+};
+
+export const removeDeal = async (req, res) => {
+  try {
+    const product = await Product.findById(req.params.id);
+
+    if (!product) {
+      return res.status(404).json({ message: "Product not found" });
+    }
+
+    product.deal = {
+      isActive: false,
+    };
+
+    await product.save();
+
+    res.json({ success: true });
+  } catch {
+    res.status(500).json({ message: "Failed to remove deal" });
+  }
+};
+
+export const getFeaturedProducts = async (req, res) => {
+  try {
+    const products = await Product.find({
+      isFeatured: true,
+      isAvailable: true,
+    })
+    .sort({ createdAt: -1 })
+    .lean();
+
+    const safe = products.map(p => {
+      const variant =
+        p.variants?.[p.heroVariantIndex] ??
+        p.variants?.[0] ??
+        null;
+
+      return {
+        ...p,
+        price: variant?.price || 0,
+      };
+    });
+
+    res.json({
+      success: true,
+      data: safe,
+    });
+
+  } catch (err) {
+    console.error("FEATURED ERROR:", err);
+    res.status(500).json({
+      success: false,
+      message: err.message,
+    });
+  }
+};
+
+export const getDealsOfTheDay = async (req, res) => {
+  try {
+    const now = new Date();
+
+    const products = await Product.find({
+      "deal.isActive": true,
+      "deal.startAt": { $lte: now },
+      "deal.endAt": { $gte: now },
+      isAvailable: true,
+    }).lean();
+
+    const safe = products.map(p => {
+      const variant =
+        p.variants?.[p.heroVariantIndex] ??
+        p.variants?.[0] ??
+        null;
+
+      return {
+        ...p,
+        price: variant?.price || 0,
+        discountPercent: p.deal?.discountPercent || 0,
+      };
+    });
+
+    res.json({
+      success: true,
+      data: safe,
+    });
+
+  } catch (err) {
+    console.error("DEALS ERROR:", err);
+    res.status(500).json({
+      success: false,
+      message: err.message,
+    });
+  }
+};
+
+

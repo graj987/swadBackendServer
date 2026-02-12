@@ -119,16 +119,8 @@ export const verifyAdmin = async (req, res) => {
 
 export const addProduct = async (req, res) => {
   try {
-    const {
-      name,
-      description,
-      category,
-      weight,
-      price,
-      stock,
-    } = req.body;
+    const { name, description, category } = req.body;
 
- 
     if (!name || !description || !category) {
       return res.status(400).json({
         success: false,
@@ -136,12 +128,36 @@ export const addProduct = async (req, res) => {
       });
     }
 
-    // 🔒 Variant validation (THIS WAS MISSING)
-    if (!weight || price == null || stock == null) {
+    // Parse variants from FormData (string → array)
+    let variants = [];
+
+    if (req.body.variants) {
+      try {
+        variants = JSON.parse(req.body.variants);
+      } catch (e) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid variants format",
+        });
+      }
+    }
+
+    // Validate variants array
+    if (!Array.isArray(variants) || variants.length === 0) {
       return res.status(400).json({
         success: false,
-        message: "Variant weight, price, and stock are required",
+        message: "At least one variant is required",
       });
+    }
+
+    // Validate each variant
+    for (const v of variants) {
+      if (!v.weight || v.price == null || v.stock == null) {
+        return res.status(400).json({
+          success: false,
+          message: "Each variant must have weight, price, stock",
+        });
+      }
     }
 
     if (!req.file) {
@@ -151,7 +167,6 @@ export const addProduct = async (req, res) => {
       });
     }
 
-    // Upload image
     const uploadResult = await uploadBufferToCloudinary(req.file.buffer);
 
     const product = await Product.create({
@@ -159,21 +174,18 @@ export const addProduct = async (req, res) => {
       description,
       category,
       image: uploadResult.secure_url,
-
-      // ✅ CREATE VARIANT ARRAY
-      variants: [
-        {
-          weight,
-          price: Number(price),
-          stock: Number(stock),
-        },
-      ],
+      variants: variants.map(v => ({
+        weight: v.weight,
+        price: Number(v.price),
+        stock: Number(v.stock),
+      })),
     });
 
     res.status(201).json({
       success: true,
       product,
     });
+
   } catch (err) {
     console.error("Add product error:", err);
     res.status(500).json({
@@ -182,6 +194,8 @@ export const addProduct = async (req, res) => {
     });
   }
 };
+
+
 
 
 export const getHeroProduct = async (req, res) => {

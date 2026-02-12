@@ -20,7 +20,7 @@ const variantSchema = new mongoose.Schema(
       min: 0,
     },
   },
-  { _id: false }
+  { _id: false },
 );
 
 /* ================= PRODUCT SCHEMA ================= */
@@ -89,6 +89,35 @@ const productSchema = new mongoose.Schema(
       ],
     },
 
+    /* ================= FEATURED ================= */
+    isFeatured: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+
+    /* ================= DEAL OF THE DAY ================= */
+    deal: {
+      isActive: {
+        type: Boolean,
+        default: false,
+      },
+
+      discountPercent: {
+        type: Number,
+        min: 1,
+        max: 90,
+      },
+
+      startAt: {
+        type: Date,
+      },
+
+      endAt: {
+        type: Date,
+      },
+    },
+
     /* ================= META ================= */
 
     ratings: {
@@ -106,10 +135,34 @@ const productSchema = new mongoose.Schema(
       default: true,
     },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 /* ================= INDEXES ================= */
+productSchema.virtual("isDealActive").get(function () {
+  if (!this.deal?.isActive) return false;
+
+  const now = new Date();
+  return (
+    this.deal.startAt &&
+    this.deal.endAt &&
+    now >= this.deal.startAt &&
+    now <= this.deal.endAt
+  );
+});
+productSchema.methods.getFinalPrice = function (basePrice) {
+  if (this.isDealActive && this.deal?.discountPercent) {
+    return Math.round(
+      basePrice - (basePrice * this.deal.discountPercent) / 100
+    );
+  }
+  return basePrice;
+};
+
+
+productSchema.set("toJSON", { virtuals: true });
+productSchema.set("toObject", { virtuals: true });
+
 
 // Text search
 productSchema.index({ name: "text", category: "text" });
@@ -117,7 +170,7 @@ productSchema.index({ name: "text", category: "text" });
 // Ensure ONLY ONE hero product exists
 productSchema.index(
   { isHero: 1 },
-  { unique: true, partialFilterExpression: { isHero: true } }
+  { unique: true, partialFilterExpression: { isHero: true } },
 );
 
 /* ================= MODEL EXPORT ================= */

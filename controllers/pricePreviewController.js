@@ -10,16 +10,22 @@ export const getPricePreview = async (req, res) => {
     const userId = req.userId;
 
     if (!Array.isArray(products) || products.length === 0) {
-      return res.status(400).json({ success: false, message: "No products provided" });
+      return res
+        .status(400)
+        .json({ success: false, message: "No products provided" });
     }
 
     if (!addressId) {
-      return res.status(400).json({ success: false, message: "Address is required" });
+      return res
+        .status(400)
+        .json({ success: false, message: "Address is required" });
     }
 
     const address = await Address.findOne({ _id: addressId, userId });
     if (!address) {
-      return res.status(404).json({ success: false, message: "Address not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Address not found" });
     }
 
     // REGION BASED DELIVERY CHARGE
@@ -27,14 +33,23 @@ export const getPricePreview = async (req, res) => {
     const deliveryCharge = calculateDeliveryCharge(region);
 
     // FETCH PRODUCT DATA
-    const productIds = products.map(p => p.product);
+    const productIds = products.map((p) => p.product);
     const dbProducts = await Product.find({ _id: { $in: productIds } });
 
     let subtotal = 0;
+
     for (const item of products) {
-      const dbProduct = dbProducts.find(p => p._id.toString() === item.product);
+      const dbProduct = dbProducts.find(
+        (p) => p._id.toString() === item.product,
+      );
+
       if (!dbProduct) continue;
-      subtotal += dbProduct.price * item.quantity;
+
+      const variant = dbProduct.variants[item.variantIndex];
+
+      if (!variant) continue;
+
+      subtotal += variant.price * item.quantity;
     }
 
     const tax = Math.round(subtotal * 0.12);
@@ -44,13 +59,14 @@ export const getPricePreview = async (req, res) => {
 
     return res.json({
       success: true,
-      subtotal,
-      tax,
-      deliveryCharge,
-      codCharge,
-      totalAmount,
+      data: {
+        subtotal,
+        tax,
+        deliveryCharge,
+        codCharge,
+        totalAmount,
+      },
     });
-
   } catch (err) {
     return res.status(500).json({
       success: false,

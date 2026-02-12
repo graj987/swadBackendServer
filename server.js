@@ -77,11 +77,6 @@ app.use("/api/instagram", brandRoutes);
 app.use("/api/blogs", blogRoutes);          
 app.use("/api/admin/blogs", adminBlogRoutes);
 
-
-
-
-
-
 /* ================= ERROR HANDLER ================= */
 app.use((err, req, res, next) => {
   console.error("Global Error:", err);

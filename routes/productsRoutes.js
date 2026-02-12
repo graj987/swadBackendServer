@@ -3,20 +3,29 @@ import {
   getProducts,
   getProductById,
   getProductsCount,
-  featuredProducts,
   searchProducts,
-  getProductHero
+  getProductHero,
+  toggleFeaturedProduct,
+  setDealOfTheDay,
+  removeDeal,
+  getFeaturedProducts,
+  getDealsOfTheDay,
 } from "../controllers/productsController.js";
-
+import { protectAdmin } from "../middleware/adminMiddleware.js";
 
 const router = express.Router();
 
 router.get("/", getProducts);
 router.get("/hero",getProductHero);
+router.get("/deals", getDealsOfTheDay);
+router.get("/featured", getFeaturedProducts);
 router.get("/count", getProductsCount);
-router.get("/featured", featuredProducts);
-router.get("/search", searchProducts); // must be BEFORE /:id
-router.get("/:id", getProductById); // dynamic route ALWAYS LAST
+router.get("/search", searchProducts); 
+router.patch("/admin/:id/featured", protectAdmin,toggleFeaturedProduct);
+router.patch("/:id/featured", protectAdmin,toggleFeaturedProduct);
+router.post("/admin/:id/deal", protectAdmin, setDealOfTheDay);
+router.delete("/admin/:id/deal", protectAdmin, removeDeal);
+router.get("/:id", getProductById); 
 
 
 export default router;
