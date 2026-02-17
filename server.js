@@ -1,13 +1,14 @@
 import express from "express";
 import dotenv from "dotenv";
-dotenv.config();
-
 import cors from "cors";
 import http from "http";
+import helmet from "helmet";
+import rateLimit from "express-rate-limit";
 import { Server } from "socket.io";
 
-import connectDB from "./config/db.js";
+dotenv.config();
 
+import connectDB from "./config/db.js";
 import productRoutes from "./routes/productsRoutes.js";
 import orderRoutes from "./routes/orderRoutes.js";
 import usersRoutes from "./routes/usersRoutes.js";
@@ -28,19 +29,52 @@ import blogRoutes from "./routes/blogRoutes.js";
 connectDB();
 
 const app = express();
+app.set("trust proxy", 1); // IMPORTANT for Render
 
 /* ================= HTTP SERVER ================= */
 const server = http.createServer(app);
 
+/* ================= SECURITY ================= */
+
+app.use(helmet());
+
+app.use(cors({
+  origin: [
+    "http://localhost:5173",
+    "https://swadbest.com",
+    "https://www.swadbest.com"
+  ],
+  credentials: true,
+}));
+
+app.use(express.json({ limit: "10kb" }));
+
+/* ================= RATE LIMIT ================= */
+
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 300,
+});
+
+const paymentLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 50,
+});
+
+app.use("/api", apiLimiter);
+app.use("/api/payments", paymentLimiter);
+
 /* ================= SOCKET.IO ================= */
+
 export const io = new Server(server, {
   cors: {
     origin: [
-      "http://localhost:5173",        // local frontend
-      "https://swadbest.com"          // production frontend
+      "http://localhost:5173",
+      "https://swadbest.com",
+      "https://www.swadbest.com"
     ],
-    methods: ["GET", "POST"]
-  }
+    methods: ["GET", "POST"],
+  },
 });
 
 io.on("connection", (socket) => {
@@ -51,16 +85,14 @@ io.on("connection", (socket) => {
   });
 });
 
-/* ================= MIDDLEWARE ================= */
-app.use(cors());
-app.use(express.json());
-
 /* ================= HEALTH ================= */
+
 app.get("/", (req, res) => {
   res.json({ message: "API running..." });
 });
 
 /* ================= ROUTES ================= */
+
 app.use("/api/users", usersRoutes);
 app.use("/api/products", productRoutes);
 app.use("/api/address", addressRoutes);
@@ -71,21 +103,24 @@ app.use("/api/shiprocket", shiprocketRoutes);
 app.use("/api/cod", codRoutes);
 app.use("/api/admin/orders", adminOrderRoutes);
 app.use("/api/cart", cartWishlistRoutes);
-app.use("/api/admin/notification", notificationadmin );
+app.use("/api/admin/notification", notificationadmin);
 app.use("/api/offers", offerRoutes);
 app.use("/api/instagram", brandRoutes);
-app.use("/api/blogs", blogRoutes);          
+app.use("/api/blogs", blogRoutes);
 app.use("/api/admin/blogs", adminBlogRoutes);
 
 /* ================= ERROR HANDLER ================= */
+
 app.use((err, req, res, next) => {
   console.error("Global Error:", err);
+
   res.status(500).json({
     success: false,
     message: "Internal Server Error",
-    error: err.message,
   });
 });
+
+/* ================= OFFER AUTO EXPIRE ================= */
 
 setInterval(async () => {
   try {
@@ -100,7 +135,9 @@ setInterval(async () => {
 }, 60 * 1000);
 
 /* ================= START SERVER ================= */
+
 const PORT = process.env.PORT || 5000;
+
 server.listen(PORT, () =>
   console.log(`🚀 Server + Socket.IO running on port ${PORT}`)
 );
