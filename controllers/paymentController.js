@@ -262,3 +262,49 @@ export const webhookHandler = async (req, res) => {
     return res.status(500).send("server error");
   }
 };
+
+
+export const paymentSuccess = async (req, res) => {
+  try {
+    const { orderId } = req.params;
+
+    if (!orderId) {
+      return res.status(400).json({
+        ok: false,
+        message: "Order ID is required",
+      });
+    }
+
+    const order = await Order.findById(orderId);
+
+    if (!order) {
+      return res.status(404).json({
+        ok: false,
+        message: "Order not found",
+      });
+    }
+
+    if (order.paymentStatus !== "paid") {
+      return res.status(400).json({
+        ok: false,
+        message: "Payment not completed",
+        paymentStatus: order.paymentStatus,
+      });
+    }
+
+    return res.status(200).json({
+      ok: true,
+      message: "Payment successful",
+      orderId: order._id,
+      paymentId: order.razorpay_payment_id,
+      amount: order.totalAmount,
+      status: order.orderStatus,
+    });
+  } catch (error) {
+    console.error("paymentSuccess error:", error);
+    return res.status(500).json({
+      ok: false,
+      message: "Server error",
+    });
+  }
+};

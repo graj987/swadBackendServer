@@ -8,9 +8,7 @@ import {
 import Order from "../models/order.js";
 import { trackByAWB } from "../services/shiprocketServices.js";
 
-/* -------------------------------------------------- */
-/* STATUS NORMALIZER (Shiprocket sends messy values)   */
-/* -------------------------------------------------- */
+
 const normalizeStatus = (s = "") => {
   s = s.toLowerCase();
 
@@ -24,9 +22,7 @@ const normalizeStatus = (s = "") => {
   return "created";
 };
 
-/* -------------------------------------------------- */
-/* CREATE SHIPMENT                                    */
-/* -------------------------------------------------- */
+
 export const createShipmentController = async (req, res) => {
   try {
     const { orderId } = req.params;
@@ -42,9 +38,7 @@ export const createShipmentController = async (req, res) => {
   }
 };
 
-/* -------------------------------------------------- */
-/* GENERATE AWB                                       */
-/* -------------------------------------------------- */
+
 export const generateAWBController = async (req, res) => {
   try {
     const { orderId } = req.params;
