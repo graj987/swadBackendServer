@@ -93,7 +93,14 @@ const userSchema = new mongoose.Schema(
 
 /* ================= INDEXES ================= */
 
-userSchema.index({ email: 1 });
+userSchema.index({email: {
+  type: String,
+  required: true,
+  unique: true,
+  trim: true,
+  lowercase: true
+}
+ }, { unique: true });
 userSchema.index({ codEligible: 1 });
 userSchema.index({ isVerified: 1 });
 userSchema.index({ createdAt: -1 });
