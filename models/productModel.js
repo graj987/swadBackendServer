@@ -5,7 +5,7 @@ import mongoose from "mongoose";
 const variantSchema = new mongoose.Schema(
   {
     weight: {
-      type: String, // e.g. "250 g", "500 g", "1 kg"
+      type: String,
       required: true,
       trim: true,
     },
@@ -20,7 +20,7 @@ const variantSchema = new mongoose.Schema(
       min: 0,
     },
   },
-  { _id: false },
+  { _id: false }
 );
 
 /* ================= PRODUCT SCHEMA ================= */
@@ -72,31 +72,29 @@ const productSchema = new mongoose.Schema(
       validate: [
         {
           validator: function (v) {
-            // allow null when not hero
-            if (v === null) return !this.isHero;
-            return Number.isInteger(v);
+            if (!this.isHero) return v === null;
+            return (
+              Number.isInteger(v) &&
+              v >= 0 &&
+              this.variants &&
+              v < this.variants.length
+            );
           },
-          message: "heroVariantIndex must be an integer or null",
-        },
-        {
-          validator: function (v) {
-            // if hero → index must exist
-            if (this.isHero) return v !== null;
-            return true;
-          },
-          message: "heroVariantIndex is required when product is hero",
+          message:
+            "heroVariantIndex must be valid index of variants when product is hero",
         },
       ],
     },
 
     /* ================= FEATURED ================= */
+
     isFeatured: {
       type: Boolean,
       default: false,
-      index: true,
     },
 
-    /* ================= DEAL OF THE DAY ================= */
+    /* ================= DEAL ================= */
+
     deal: {
       isActive: {
         type: Boolean,
@@ -109,13 +107,8 @@ const productSchema = new mongoose.Schema(
         max: 90,
       },
 
-      startAt: {
-        type: Date,
-      },
-
-      endAt: {
-        type: Date,
-      },
+      startAt: Date,
+      endAt: Date,
     },
 
     /* ================= META ================= */
@@ -123,11 +116,14 @@ const productSchema = new mongoose.Schema(
     ratings: {
       type: Number,
       default: 0,
+      min: 0,
+      max: 5,
     },
 
     numReviews: {
       type: Number,
       default: 0,
+      min: 0,
     },
 
     isAvailable: {
@@ -135,10 +131,11 @@ const productSchema = new mongoose.Schema(
       default: true,
     },
   },
-  { timestamps: true },
+  { timestamps: true }
 );
 
-/* ================= INDEXES ================= */
+/* ================= VIRTUALS ================= */
+
 productSchema.virtual("isDealActive").get(function () {
   if (!this.deal?.isActive) return false;
 
@@ -150,6 +147,9 @@ productSchema.virtual("isDealActive").get(function () {
     now <= this.deal.endAt
   );
 });
+
+/* ================= METHODS ================= */
+
 productSchema.methods.getFinalPrice = function (basePrice) {
   if (this.isDealActive && this.deal?.discountPercent) {
     return Math.round(
@@ -159,21 +159,33 @@ productSchema.methods.getFinalPrice = function (basePrice) {
   return basePrice;
 };
 
+/* ================= JSON SETTINGS ================= */
 
 productSchema.set("toJSON", { virtuals: true });
 productSchema.set("toObject", { virtuals: true });
 
+/* ================= INDEXES ================= */
 
-// Text search
-productSchema.index({ name: "text", category: "text" });
+// ONE text index only
+productSchema.index({
+  name: "text",
+  category: "text",
+  description: "text",
+});
 
-// Ensure ONLY ONE hero product exists
+// Hero unique partial index
 productSchema.index(
   { isHero: 1 },
-  { unique: true, partialFilterExpression: { isHero: true } },
+  { unique: true, partialFilterExpression: { isHero: true } }
 );
 
-/* ================= MODEL EXPORT ================= */
+// Query optimization indexes
+productSchema.index({ isFeatured: 1 });
+productSchema.index({ category: 1 });
+productSchema.index({ isAvailable: 1 });
+productSchema.index({ "deal.isActive": 1 });
+
+/* ================= MODEL ================= */
 
 const Product = mongoose.model("Product", productSchema);
 export default Product;
