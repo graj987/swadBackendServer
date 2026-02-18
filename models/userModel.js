@@ -4,7 +4,14 @@ const userSchema = new mongoose.Schema(
   {
     /* ================= BASIC ================= */
     name: { type: String, required: true },
-    email: { type: String, required: true, unique: true },
+    email: {
+      type: String,
+      required: true,
+      unique: true,
+      trim: true,
+      lowercase: true,
+    },
+
     avatar: { type: String, default: "" },
     password: { type: String, required: true },
 
@@ -18,8 +25,8 @@ const userSchema = new mongoose.Schema(
 
     /* ================= ORDER / TRUST ================= */
 
-    rtoCount: { type: Number, default: 0 },         // Returned orders
-    deliveredCount: { type: Number, default: 0 },   // Successful deliveries
+    rtoCount: { type: Number, default: 0 }, // Returned orders
+    deliveredCount: { type: Number, default: 0 }, // Successful deliveries
 
     trustScore: {
       type: Number,
@@ -88,19 +95,9 @@ const userSchema = new mongoose.Schema(
       default: "",
     },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
-/* ================= INDEXES ================= */
-
-userSchema.index({email: {
-  type: String,
-  required: true,
-  unique: true,
-  trim: true,
-  lowercase: true
-}
- }, { unique: true });
 userSchema.index({ codEligible: 1 });
 userSchema.index({ isVerified: 1 });
 userSchema.index({ createdAt: -1 });

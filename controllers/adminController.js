@@ -196,8 +196,6 @@ export const addProduct = async (req, res) => {
 };
 
 
-
-
 export const getHeroProduct = async (req, res) => {
   try {
     const product = await Product.findOne({ isHero: true });
