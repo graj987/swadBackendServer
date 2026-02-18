@@ -71,7 +71,8 @@ export const io = new Server(server, {
     origin: [
       "http://localhost:5173",
       "https://swadbest.com",
-      "https://www.swadbest.com"
+      "https://www.swadbest.com",
+      "https://swadbestadminpannel.onrender.com"
     ],
     methods: ["GET", "POST"],
   },
@@ -120,7 +121,6 @@ app.use((err, req, res, next) => {
   });
 });
 
-/* ================= OFFER AUTO EXPIRE ================= */
 
 setInterval(async () => {
   try {
@@ -134,7 +134,6 @@ setInterval(async () => {
   }
 }, 60 * 1000);
 
-/* ================= START SERVER ================= */
 
 const PORT = process.env.PORT || 5000;
 
