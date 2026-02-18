@@ -42,7 +42,8 @@ app.use(cors({
   origin: [
     "http://localhost:5173",
     "https://swadbest.com",
-    "https://www.swadbest.com"
+    "https://www.swadbest.com",
+    "https://swadbestadminpannel.onrender.com"
   ],
   credentials: true,
 }));
