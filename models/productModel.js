@@ -20,7 +20,21 @@ const variantSchema = new mongoose.Schema(
       min: 0,
     },
   },
-  { _id: false }
+  { _id: false },
+);
+
+const reviewSchema = new mongoose.Schema(
+  {
+    user: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
+    name: { type: String, required: true },
+    rating: { type: Number, required: true },
+    comment: { type: String, required: true },
+  },
+  { timestamps: true },
 );
 
 /* ================= PRODUCT SCHEMA ================= */
@@ -113,17 +127,14 @@ const productSchema = new mongoose.Schema(
 
     /* ================= META ================= */
 
-    ratings: {
-      type: Number,
-      default: 0,
-      min: 0,
-      max: 5,
-    },
-
+    reviews: [reviewSchema],
     numReviews: {
       type: Number,
       default: 0,
-      min: 0,
+    },
+    rating: {
+      type: Number,
+      default: 0,
     },
 
     isAvailable: {
@@ -131,7 +142,7 @@ const productSchema = new mongoose.Schema(
       default: true,
     },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 /* ================= VIRTUALS ================= */
@@ -153,7 +164,7 @@ productSchema.virtual("isDealActive").get(function () {
 productSchema.methods.getFinalPrice = function (basePrice) {
   if (this.isDealActive && this.deal?.discountPercent) {
     return Math.round(
-      basePrice - (basePrice * this.deal.discountPercent) / 100
+      basePrice - (basePrice * this.deal.discountPercent) / 100,
     );
   }
   return basePrice;
@@ -176,7 +187,7 @@ productSchema.index({
 // Hero unique partial index
 productSchema.index(
   { isHero: 1 },
-  { unique: true, partialFilterExpression: { isHero: true } }
+  { unique: true, partialFilterExpression: { isHero: true } },
 );
 
 // Query optimization indexes

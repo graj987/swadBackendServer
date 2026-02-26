@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 
 const userSchema = new mongoose.Schema(
   {
-    /* ================= BASIC ================= */
+    
     name: { type: String, required: true },
     email: {
       type: String,
@@ -23,10 +23,9 @@ const userSchema = new mongoose.Schema(
     otp: { type: String, default: null },
     otpExpiry: { type: Date, default: null },
 
-    /* ================= ORDER / TRUST ================= */
 
-    rtoCount: { type: Number, default: 0 }, // Returned orders
-    deliveredCount: { type: Number, default: 0 }, // Successful deliveries
+    rtoCount: { type: Number, default: 0 }, 
+    deliveredCount: { type: Number, default: 0 }, 
 
     trustScore: {
       type: Number,
@@ -38,13 +37,12 @@ const userSchema = new mongoose.Schema(
 
     codEligible: { type: Boolean, default: false },
 
-    /* ================= ADDED: ORDER STATS ================= */
 
     totalOrders: {
       type: Number,
       default: 0,
     },
-
+    
     totalSpent: {
       type: Number,
       default: 0,
@@ -55,10 +53,8 @@ const userSchema = new mongoose.Schema(
       default: null,
     },
 
-    /* ================= ADDED: ANALYTICS ================= */
-
     signupSource: {
-      type: String, // google, instagram, referral, direct
+      type: String,
       default: "direct",
       index: true,
     },
@@ -67,8 +63,6 @@ const userSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
-
-    /* ================= ADDED: ACCOUNT STATUS ================= */
 
     isBlocked: {
       type: Boolean,
@@ -80,8 +74,6 @@ const userSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
-
-    /* ================= ADDED: ADMIN ================= */
 
     role: {
       type: String,
@@ -101,7 +93,5 @@ const userSchema = new mongoose.Schema(
 userSchema.index({ codEligible: 1 });
 userSchema.index({ isVerified: 1 });
 userSchema.index({ createdAt: -1 });
-
-/* ================= EXPORT ================= */
 
 export const User = mongoose.model("User", userSchema);

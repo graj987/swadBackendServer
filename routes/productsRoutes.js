@@ -10,6 +10,7 @@ import {
   removeDeal,
   getFeaturedProducts,
   getDealsOfTheDay,
+  addReview,
 } from "../controllers/productsController.js";
 import { protectAdmin } from "../middleware/adminMiddleware.js";
 
@@ -23,6 +24,7 @@ router.get("/count", getProductsCount);
 router.get("/search", searchProducts); 
 router.patch("/admin/:id/featured", protectAdmin,toggleFeaturedProduct);
 router.patch("/:id/featured", protectAdmin,toggleFeaturedProduct);
+router.post("/:id/reviews", protectAdmin, addReview);
 router.post("/admin/:id/deal", protectAdmin, setDealOfTheDay);
 router.delete("/admin/:id/deal", protectAdmin, removeDeal);
 router.get("/:id", getProductById); 
