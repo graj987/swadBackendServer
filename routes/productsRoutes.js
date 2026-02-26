@@ -11,6 +11,7 @@ import {
   getFeaturedProducts,
   getDealsOfTheDay,
   addReview,
+  
 } from "../controllers/productsController.js";
 import { protectAdmin } from "../middleware/adminMiddleware.js";
 
