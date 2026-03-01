@@ -25,6 +25,7 @@ import offerRoutes from "./routes/offerRoutes.js";
 import Offer from "./models/offer.js";
 import adminBlogRoutes from "./routes/adminBlogRoutes.js";
 import blogRoutes from "./routes/blogRoutes.js";
+import { webhookHandler } from "./controllers/paymentController.js";
 
 connectDB();
 
@@ -111,6 +112,11 @@ app.use("/api/instagram", brandRoutes);
 app.use("/api/blogs", blogRoutes);
 app.use("/api/admin/blogs", adminBlogRoutes);
 
+app.post(
+  "/api/payments/webhook",
+  express.raw({ type: "application/json" }),
+  webhookHandler
+);
 /* ================= ERROR HANDLER ================= */
 
 app.use((err, req, res, next) => {

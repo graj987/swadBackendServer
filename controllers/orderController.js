@@ -36,7 +36,10 @@ export const createOrder = async (req, res) => {
       .lean(false);
 
     if (!cartDoc || cartDoc.items.length === 0) {
-      throw { status: 400, message: "Cart is empty" };
+      return res.status(400).json({
+        success: false,
+        message: "Cart already processed or empty",
+      });
     }
 
     const address = await Address.findOne({ _id: addressId, userId })
@@ -257,8 +260,9 @@ export const checkStock = async (req, res) => {
 export const getMyOrders = async (req, res) => {
   try {
     const orders = await Order.find({ user: req.user.id })
-      .populate("items.product")
-      .sort({ createdAt: -1 });
+      .select("_id orderNumber totalAmount paymentStatus orderStatus createdAt")
+      .sort({ createdAt: -1 })
+      .lean();
 
     res.json({ success: true, data: orders });
   } catch {
@@ -271,7 +275,15 @@ export const getOrderById = async (req, res) => {
     const order = await Order.findOne({
       _id: req.params.id,
       user: req.user.id,
-    }).populate("items.product");
+    })
+      .select(
+        "_id totalAmount address shipping items createdAt orderStatus paymentStatus",
+      )
+      .populate({
+        path: "items.product",
+        select: "name image",
+      })
+      .lean();
 
     if (!order) {
       return res.status(404).json({
@@ -288,8 +300,7 @@ export const getOrderById = async (req, res) => {
 
 export const getOrdersCount = async (req, res) => {
   try {
-    // 🔐 ADMIN ONLY — enforce via middleware
-    const count = await Order.countDocuments();
+    const count = await Order.countDocuments().lean();
     res.json({ success: true, count });
   } catch (err) {
     res.status(500).json({ success: false, message: "Failed to fetch count" });

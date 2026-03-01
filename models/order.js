@@ -1,7 +1,5 @@
 import mongoose from "mongoose";
 
-/* ================= ORDER ITEM ================= */
-
 const orderItemSchema = new mongoose.Schema(
   {
     product: {
@@ -9,17 +7,14 @@ const orderItemSchema = new mongoose.Schema(
       ref: "Product",
       required: true,
     },
-
     variant: {
       weight: { type: String, required: true },
     },
-
     quantity: {
       type: Number,
       required: true,
       min: 1,
     },
-
     priceAtPurchase: {
       type: Number,
       required: true,
@@ -28,8 +23,6 @@ const orderItemSchema = new mongoose.Schema(
   },
   { _id: false }
 );
-
-/* ================= ADDRESS ================= */
 
 const addressSchema = new mongoose.Schema(
   {
@@ -44,35 +37,18 @@ const addressSchema = new mongoose.Schema(
   { _id: false }
 );
 
-/* ================= CONSTANTS ================= */
-
-const ORDER_STATUSES = [
-  "placed",
-  "preparing",
-  "shipped",
-  "delivered",
-  "cancelled",
-];
-
-const PAYMENT_STATUSES = [
-  "pending",
-  "initiated",
-  "paid",
-  "failed",
-];
-
-/* ================= ORDER ================= */
+const ORDER_STATUSES = ["placed", "preparing", "shipped", "delivered", "cancelled"];
+const PAYMENT_STATUSES = ["pending", "initiated", "paid", "failed"];
 
 const orderSchema = new mongoose.Schema(
   {
-    /* USER */
     user: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: true,
+      index: true,
     },
 
-    /* ITEMS */
     items: {
       type: [orderItemSchema],
       required: true,
@@ -82,25 +58,18 @@ const orderSchema = new mongoose.Schema(
       },
     },
 
-    /* ADDRESS */
     address: {
       type: addressSchema,
       required: true,
     },
 
-    /* PRICING */
     subtotal: { type: Number, required: true, min: 0 },
     tax: { type: Number, default: 0, min: 0 },
     deliveryCharge: { type: Number, default: 0, min: 0 },
     codCharge: { type: Number, default: 0, min: 0 },
 
-    totalAmount: {
-      type: Number,
-      required: true,
-      min: 0,
-    },
+    totalAmount: { type: Number, required: true, min: 0 },
 
-    /* PAYMENT */
     paymentMethod: {
       type: String,
       enum: ["COD", "Online"],
@@ -111,22 +80,37 @@ const orderSchema = new mongoose.Schema(
       type: String,
       enum: PAYMENT_STATUSES,
       default: "pending",
+      index: true,
     },
 
-    razorpay_order_id: String,
-    razorpay_payment_id: String,
-    razorpay_signature: String,
+    razorpay_order_id: {
+      type: String,
+      index: true,
+      sparse: true,
+    },
+
+    razorpay_payment_id: {
+      type: String,
+      index: true,
+      sparse: true,
+    },
+
+    razorpay_signature: {
+      type: String,
+      select: false,
+    },
 
     paymentDetails: {
       type: Object,
       default: {},
+      select: false,
     },
 
-    /* ORDER STATUS */
     orderStatus: {
       type: String,
       enum: ORDER_STATUSES,
       default: "placed",
+      index: true,
     },
 
     statusHistory: [
@@ -136,81 +120,62 @@ const orderSchema = new mongoose.Schema(
       },
     ],
 
-    /* ================= SHIPPING (SHIPROCKET) ================= */
-
-   shipping: {
-  shipmentId: { type: String, default: null },
-  awb: { type: String, default: null },
-
-  courierName: { type: String, default: null },
-  courierId: { type: String, default: null },
-
-  status: {
-    type: String,
-    enum: [
-      "not_created",
-      "created",
-      "awb_assigned",
-      "pickup_scheduled",
-      "shipped",
-      "in_transit",
-      "out_for_delivery",
-      "delivered",
-      "rto",
-      "cancelled",
-      "failed"
-    ],
-    default: "not_created",
-  },
-
-  package: {
-    weight: Number,
-    length: Number,
-    breadth: Number,
-    height: Number,
-  },
-
-  labelUrl: String,
-  manifestUrl: String,
-  invoiceUrl: String,
-
-  lastError: {
-    message: String,
-    code: String,
-    date: Date,
-  },
-
-  trackHistory: [
-    {
-      status: String,
-      location: String,
-      message: String,
-      raw: Object,
-      date: { type: Date, default: Date.now },
+    shipping: {
+      shipmentId: { type: String, default: null },
+      awb: { type: String, default: null },
+      courierName: { type: String, default: null },
+      courierId: { type: String, default: null },
+      status: {
+        type: String,
+        enum: [
+          "not_created",
+          "created",
+          "awb_assigned",
+          "pickup_scheduled",
+          "shipped",
+          "in_transit",
+          "out_for_delivery",
+          "delivered",
+          "rto",
+          "cancelled",
+          "failed",
+        ],
+        default: "not_created",
+      },
+      package: {
+        weight: Number,
+        length: Number,
+        breadth: Number,
+        height: Number,
+      },
+      labelUrl: String,
+      manifestUrl: String,
+      invoiceUrl: String,
+      lastError: {
+        message: String,
+        code: String,
+        date: Date,
+      },
+      trackHistory: [
+        {
+          status: String,
+          location: String,
+          message: String,
+          raw: Object,
+          date: { type: Date, default: Date.now },
+        },
+      ],
     },
-  ],
-},
-
-
-    /* ================= ADDED: ANALYTICS HELPERS ================= */
 
     orderNumber: {
       type: String,
       unique: true,
+      sparse: true,
       index: true,
     },
 
-    orderMonth: {
-      type: Number, // 1–12
-      index: true,
-    },
-
-    orderYear: {
-      type: Number,
-      index: true,
-    },
-
-    /* ================= ADDED: REVENUE FLAGS ================= */
+    orderMonth: { type: Number, index: true },
+    orderYear: { type: Number, index: true },
 
     isPaidOrder: {
       type: Boolean,
@@ -223,16 +188,12 @@ const orderSchema = new mongoose.Schema(
       default: false,
     },
 
-    /* ================= ADDED: REFUND ================= */
-
     refund: {
       isRefunded: { type: Boolean, default: false },
       refundAmount: { type: Number, default: 0 },
       refundReason: String,
       refundedAt: Date,
     },
-
-    /* ================= ADDED: ADMIN ================= */
 
     createdByAdmin: {
       type: Boolean,
@@ -244,31 +205,16 @@ const orderSchema = new mongoose.Schema(
       default: "",
     },
 
-    /* ================= ADDED: CONVERSION TRACKING ================= */
-
-    trafficSource: {
-      type: String, // google, instagram, direct
-    },
-
-    sessionId: {
-      type: String,
-    },
+    trafficSource: { type: String },
+    sessionId: { type: String },
   },
   { timestamps: true }
 );
 
-/* ================= INDEXES ================= */
-
-// Existing
+orderSchema.index({ user: 1, createdAt: -1 });
 orderSchema.index({ "shipping.awb": 1 });
-
-// Added for dashboard performance
 orderSchema.index({ createdAt: -1 });
-orderSchema.index({ orderStatus: 1 });
-orderSchema.index({ paymentStatus: 1 });
 orderSchema.index({ orderMonth: 1, orderYear: 1 });
-
-/* ================= EXPORT ================= */
 
 const Order = mongoose.model("Order", orderSchema);
 export default Order;

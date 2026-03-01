@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 
-/* ----------------------- REFUND SUB-SCHEMA ------------------------ */
+/* ---------------- REFUND SUB-SCHEMA ---------------- */
 const RefundSchema = new mongoose.Schema(
   {
     refund_id: String,
@@ -11,7 +11,7 @@ const RefundSchema = new mongoose.Schema(
   { _id: false }
 );
 
-/* ----------------------- CARD SUB-SCHEMA -------------------------- */
+/* ---------------- CARD SUB-SCHEMA ---------------- */
 const CardSchema = new mongoose.Schema(
   {
     network: String,
@@ -23,7 +23,7 @@ const CardSchema = new mongoose.Schema(
   { _id: false }
 );
 
-/* ----------------------- MAIN PAYMENT SCHEMA ---------------------- */
+/* ---------------- MAIN PAYMENT SCHEMA ---------------- */
 const PaymentSchema = new mongoose.Schema(
   {
     razorpay_payment_id: {
@@ -33,18 +33,37 @@ const PaymentSchema = new mongoose.Schema(
       index: true,
     },
 
-    razorpay_order_id: { type: String, index: true },
+    razorpay_order_id: {
+      type: String,
+      index: true,
+      required: true,
+    },
 
-    /* ----- Relations ----- */
-    order: { type: mongoose.Schema.Types.ObjectId, ref: "Order", default: null },
-    user: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+    order: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Order",
+      default: null,
+    },
 
-    /* ----- Money ----- */
-    amount_paise: { type: Number, required: true }, // stored in paise
-    currency: { type: String, default: "INR" },
+    user: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+      index: true,
+    },
 
-    /* ----- Status ----- */
-    method: String, // card/upi/netbanking/wallet
+    amount_paise: {
+      type: Number,
+      required: true,
+    },
+
+    currency: {
+      type: String,
+      default: "INR",
+    },
+
+    method: String,
+
     status: {
       type: String,
       enum: [
@@ -56,41 +75,77 @@ const PaymentSchema = new mongoose.Schema(
         "refund_processing",
       ],
       default: "created",
+      index: true,
     },
 
-    /* ----- Method extra info ----- */
     card: { type: CardSchema, default: null },
     vpa: String,
     bank: String,
 
-    /* ----- Razorpay raw payload ----- */
-    raw: { type: mongoose.Schema.Types.Mixed, default: {} },
+    raw: {
+      type: mongoose.Schema.Types.Mixed,
+      default: {},
+    },
 
-    /* ----- Refund tracking ----- */
-    refunds: { type: [RefundSchema], default: [] },
+    refunds: {
+      type: [RefundSchema],
+      default: [],
+    },
 
-    /* ----- Security & verification ----- */
-    signature_verified: { type: Boolean, default: false },
+    signature_verified: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+
     verification_notes: String,
     ip: String,
     userAgent: String,
 
-    /* ----- Razorpay timestamps ----- */
     created_at_unix: Number,
     captured_at_unix: Number,
 
-    /* ----- Notes (Razorpay supports this) ----- */
-    notes: { type: mongoose.Schema.Types.Mixed, default: {} },
+    notes: {
+      type: mongoose.Schema.Types.Mixed,
+      default: {},
+    },
 
-    /* ----- Metadata ----- */
-    meta: { type: mongoose.Schema.Types.Mixed, default: {} },
+    meta: {
+      type: mongoose.Schema.Types.Mixed,
+      default: {},
+    },
+
+    /* ENTERPRISE CHECKOUT SNAPSHOT */
+    checkout_snapshot: {
+      products: [
+        {
+          product: { type: mongoose.Schema.Types.ObjectId },
+          variantWeight: String,
+          quantity: Number,
+          price: Number,
+        },
+      ],
+      address: {
+        name: String,
+        phone: String,
+        line1: String,
+        city: String,
+        state: String,
+        pincode: String,
+      },
+      paymentMethod: String,
+    },
+
+    order_created: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
   },
   { timestamps: true }
 );
 
-/* ================================================================
-   STATIC: Create or Update Payment from Razorpay Object
-================================================================ */
+/* ---------------- STATIC: UPSERT FROM RAZORPAY ---------------- */
 PaymentSchema.statics.createOrUpdateFromRazorpay = async function (
   p,
   opts = {}
@@ -100,28 +155,20 @@ PaymentSchema.statics.createOrUpdateFromRazorpay = async function (
   const doc = {
     razorpay_payment_id: p.id,
     razorpay_order_id: p.order_id || null,
-
     amount_paise: p.amount,
     currency: p.currency,
-
     method: p.method,
     status: p.status,
-
     raw: p,
-
     signature_verified: !!opts.signatureVerified,
     verification_notes: opts.verificationNotes || null,
-
     ip: opts.ip || null,
     userAgent: opts.userAgent || null,
-
     notes: p.notes || {},
-
     created_at_unix: p.created_at || null,
     captured_at_unix: p.captured_at || null,
   };
 
-  /* ------- Save card info ------- */
   if (p.method === "card" && p.card) {
     doc.card = {
       network: p.card.network,
@@ -132,13 +179,9 @@ PaymentSchema.statics.createOrUpdateFromRazorpay = async function (
     };
   }
 
-  /* ------- Save UPI info ------- */
   if (p.vpa) doc.vpa = p.vpa;
-
-  /* ------- Save bank info ------- */
   if (p.bank) doc.bank = p.bank;
 
-  /* ------- Refund arrays (if Razorpay sent) ------- */
   if (Array.isArray(p.refunds?.items)) {
     doc.refunds = p.refunds.items.map((r) => ({
       refund_id: r.id,
@@ -150,23 +193,17 @@ PaymentSchema.statics.createOrUpdateFromRazorpay = async function (
     }));
   }
 
-  /* ------- Link order/user if available ------- */
   if (opts.orderRef) doc.order = opts.orderRef;
   if (opts.userRef) doc.user = opts.userRef;
 
-  /* ------- Upsert Payment ------- */
-  const updated = await this.findOneAndUpdate(
+  return this.findOneAndUpdate(
     { razorpay_payment_id: p.id },
     { $set: doc },
     { upsert: true, new: true, setDefaultsOnInsert: true }
   );
-
-  return updated;
 };
 
-/* ================================================================
-   METHOD: Add single refund
-================================================================ */
+/* ---------------- METHOD: ADD REFUND ---------------- */
 PaymentSchema.methods.addRefund = async function (r = {}) {
   this.refunds.push({
     refund_id: r.id || r.refund_id,
