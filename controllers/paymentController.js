@@ -67,7 +67,6 @@ export const createRazorpayOrder = async (req, res) => {
     if (order.paymentStatus === "paid")
       return res.json({ ok:true, alreadyPaid:true });
 
-    /* ✅ VALIDATE AMOUNT */
     const amount = Number(order.totalAmount);
 
     if (!amount || isNaN(amount) || amount <= 0) {
@@ -79,28 +78,39 @@ export const createRazorpayOrder = async (req, res) => {
 
     const amountPaise = Math.round(amount * 100);
 
-    /* ✅ PREVENT DUPLICATE RAZORPAY ORDERS */
+    /* ---------- REUSE EXISTING ORDER SAFELY ---------- */
+
     if (order.razorpay_order_id) {
-      return res.json({
-        ok:true,
-        razorpayOrder:{
-          id: order.razorpay_order_id,
-          amount: amountPaise,
-          currency:"INR",
-        },
-      });
+      try {
+        const existing = await razorpay.orders.fetch(
+          order.razorpay_order_id
+        );
+
+        return res.json({
+          ok:true,
+          razorpayOrder: existing,
+        });
+
+      } catch {
+        order.razorpay_order_id = null;
+        await order.save();
+      }
     }
 
-    /* ✅ CREATE RAZORPAY ORDER */
+    /* ---------- CREATE NEW ORDER ---------- */
+
     const razorOrder = await razorpay.orders.create({
       amount: amountPaise,
       currency: "INR",
       receipt: `swad_${order._id}`,
+      payment_capture: 1,
       notes: {
         orderId: order._id.toString(),
         userId: userId.toString(),
       },
     });
+
+    console.log("Razorpay Order Created:", razorOrder.id);
 
     order.razorpay_order_id = razorOrder.id;
     await order.save();
