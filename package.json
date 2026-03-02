@@ -35,6 +35,7 @@
   "main": "server.js",
   "scripts": {
     "dev": "nodemon server.js",
+    "build": "vite build",
     "start": "node server.js"
   },
   "keywords": [],
