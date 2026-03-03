@@ -285,3 +285,22 @@ export const addReview = async (req, res) => {
 };
 
 
+export const getLatestProducts = async (req, res) => {
+  try {
+    const products = await Product.find({})
+      .sort({ createdAt: -1 })
+      .limit(8);
+
+    res.status(200).json({
+      success: true,
+      data: products,
+    });
+  } catch (error) {
+    console.error("LATEST PRODUCTS ERROR:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to load latest products",
+    });
+  }
+};

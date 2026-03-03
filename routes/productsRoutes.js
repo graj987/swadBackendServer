@@ -11,6 +11,7 @@ import {
   getFeaturedProducts,
   getDealsOfTheDay,
   addReview,
+  getLatestProducts,
   
 } from "../controllers/productsController.js";
 import { protectAdmin } from "../middleware/adminMiddleware.js";
@@ -21,6 +22,7 @@ router.get("/", getProducts);
 router.get("/hero",getProductHero);
 router.get("/deals", getDealsOfTheDay);
 router.get("/featured", getFeaturedProducts);
+router.get("/latest", getLatestProducts);
 router.get("/count", getProductsCount);
 router.get("/search", searchProducts); 
 router.patch("/admin/:id/featured", protectAdmin,toggleFeaturedProduct);

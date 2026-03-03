@@ -14,7 +14,6 @@ dotenv.config();
 
 const { RZ_KEY_ID, RZ_KEY_SECRET, RZ_WEBHOOK_SECRET } = process.env;
 
-
 if (!RZ_KEY_ID || !RZ_KEY_SECRET || !RZ_WEBHOOK_SECRET) {
   console.error("❌ Razorpay env vars missing");
   process.exit(1);
@@ -51,10 +50,18 @@ export const createRazorpayOrder = async (req, res) => {
     const { orderId } = req.body;
 
     if (!userId)
-      return res.status(401).json({ ok:false, message:"Unauthorized" });
+      return res.status(401).json({
+        ok: false,
+        message: "Unauthorized",
+      });
 
     if (!orderId)
-      return res.status(400).json({ ok:false, message:"orderId required" });
+      return res.status(400).json({
+        ok: false,
+        message: "orderId required",
+      });
+
+    /* ================= FIND ORDER ================= */
 
     const order = await Order.findOne({
       _id: orderId,
@@ -62,69 +69,82 @@ export const createRazorpayOrder = async (req, res) => {
     });
 
     if (!order)
-      return res.status(404).json({ ok:false, message:"Order not found" });
+      return res.status(404).json({
+        ok: false,
+        message: "Order not found",
+      });
 
-    if (order.paymentStatus === "paid")
-      return res.json({ ok:true, alreadyPaid:true });
+    /* ================= ALREADY PAID ================= */
+
+    if (order.paymentStatus === "paid") {
+      return res.json({
+        ok: true,
+        alreadyPaid: true,
+        orderId: order._id,
+      });
+    }
+
+    /* ================= AMOUNT VALIDATION ================= */
 
     const amount = Number(order.totalAmount);
 
     if (!amount || isNaN(amount) || amount <= 0) {
       return res.status(400).json({
-        ok:false,
-        message:"Invalid order amount",
+        ok: false,
+        message: "Invalid order amount",
       });
     }
 
     const amountPaise = Math.round(amount * 100);
 
-    /* ---------- REUSE EXISTING ORDER SAFELY ---------- */
-
-    if (order.razorpay_order_id) {
-      try {
-        const existing = await razorpay.orders.fetch(
-          order.razorpay_order_id
-        );
-
-        return res.json({
-          ok:true,
-          razorpayOrder: existing,
-        });
-
-      } catch {
-        order.razorpay_order_id = null;
-        await order.save();
-      }
-    }
-
-    /* ---------- CREATE NEW ORDER ---------- */
+    /* ================= CREATE RAZORPAY ORDER ================= */
 
     const razorOrder = await razorpay.orders.create({
       amount: amountPaise,
       currency: "INR",
       receipt: `swad_${order._id}`,
-      payment_capture: 1,
       notes: {
         orderId: order._id.toString(),
         userId: userId.toString(),
       },
     });
 
-    console.log("Razorpay Order Created:", razorOrder.id);
+    console.log("✅ Razorpay Order Created:", razorOrder.id);
+
+    /* ================= UPDATE ORDER ================= */
 
     order.razorpay_order_id = razorOrder.id;
+    order.paymentStatus = "processing";
+    order.paymentInitiatedAt = new Date();
+
     await order.save();
 
-    res.json({
-      ok:true,
-      razorpayOrder: razorOrder,
+    /* ================= CREATE PAYMENT RECORD ================= */
+
+    await Payment.create({
+      razorpay_order_id: razorOrder.id,
+      user: userId,
+      order: order._id,
+      amount_paise: amountPaise,
+      currency: "INR",
+      status: "created",
+      notes: {
+        source: "checkout",
+      },
     });
 
+    /* ================= RESPONSE ================= */
+
+    return res.json({
+      ok: true,
+      razorpayOrder: razorOrder,
+    });
   } catch (err) {
-    console.error("createRazorpayOrder:", err);
-    res.status(500).json({
-      ok:false,
-      message:"Failed to initiate payment",
+    console.error("createRazorpayOrder error:", err);
+
+    return res.status(500).json({
+      ok: false,
+      message: "Failed to initiate payment",
     });
   }
 };
@@ -135,136 +155,144 @@ export const verifyPayment = async (req, res) => {
   try {
     session.startTransaction();
 
-    const {
-      razorpay_payment_id,
-      razorpay_order_id,
-      razorpay_signature,
-    } = req.body;
+    const { razorpay_payment_id, razorpay_order_id, razorpay_signature } =
+      req.body;
 
     if (!razorpay_payment_id || !razorpay_order_id || !razorpay_signature) {
-      return res.status(400).json({ ok: false, message: "Missing fields" });
+      await session.abortTransaction();
+      return res.status(400).json({
+        ok: false,
+        message: "Missing payment fields",
+      });
     }
 
-    /* -------- SIGNATURE VERIFY -------- */
-    const expected = crypto
+    /* ================= SIGNATURE VERIFY ================= */
+
+    const expectedSignature = crypto
       .createHmac("sha256", RZ_KEY_SECRET)
       .update(`${razorpay_order_id}|${razorpay_payment_id}`)
       .digest("hex");
 
-    if (expected !== razorpay_signature) {
-      return res.status(400).json({ ok: false, message: "Invalid signature" });
+    if (expectedSignature !== razorpay_signature) {
+      await session.abortTransaction();
+      return res.status(400).json({
+        ok: false,
+        message: "Invalid signature",
+      });
     }
 
-    /* -------- FETCH PAYMENT FROM RAZORPAY -------- */
-    const { data: p } = await axios.get(
+    /* ================= FETCH PAYMENT FROM RAZORPAY ================= */
+
+    const { data: razorpayPayment } = await axios.get(
       `https://api.razorpay.com/v1/payments/${razorpay_payment_id}`,
-      { auth: { username: RZ_KEY_ID, password: RZ_KEY_SECRET } }
+      {
+        auth: {
+          username: RZ_KEY_ID,
+          password: RZ_KEY_SECRET,
+        },
+      },
     );
 
-    if (p.status !== "captured") {
-      return res.status(400).json({ ok: false, message: "Payment not captured" });
+    if (razorpayPayment.status !== "captured") {
+      await session.abortTransaction();
+      return res.status(400).json({
+        ok: false,
+        message: "Payment not captured",
+      });
     }
 
-    /* -------- FIND PAYMENT RECORD -------- */
-    const payment = await Payment.findOne({
+    /* ================= FIND ORDER ================= */
+
+    const order = await Order.findOne({
       razorpay_order_id,
     }).session(session);
 
-    if (!payment) {
-      return res.status(404).json({ ok: false, message: "Payment not found" });
+    if (!order) {
+      await session.abortTransaction();
+      return res.status(404).json({
+        ok: false,
+        message: "Order not found",
+      });
     }
 
-    /* -------- IDEMPOTENCY CHECK -------- */
-    if (payment.order_created && payment.order) {
+    /* ================= IDEMPOTENCY ================= */
+
+    if (order.paymentStatus === "paid") {
       await session.commitTransaction();
       return res.json({
         ok: true,
-        orderId: payment.order,
+        orderId: order._id,
         alreadyProcessed: true,
       });
     }
 
-    if (payment.amount_paise !== p.amount) {
-      return res.status(400).json({ ok: false, message: "Amount mismatch" });
+    /* ================= AMOUNT VALIDATION ================= */
+
+    const expectedAmountPaise = Math.round(order.totalAmount * 100);
+
+    if (expectedAmountPaise !== razorpayPayment.amount) {
+      throw new Error("Amount mismatch detected");
     }
 
-    /* -------- CREATE ORDER FROM SNAPSHOT -------- */
-    const snapshot = payment.checkout_snapshot;
+    /* ================= STOCK LOCK + DEDUCT ================= */
 
-    if (!snapshot?.products?.length) {
-      return res.status(400).json({ ok: false, message: "Invalid snapshot" });
-    }
-
-    let subtotal = 0;
-    const orderItems = [];
-
-    for (const item of snapshot.products) {
+    for (const item of order.items) {
       const product = await Product.findById(item.product).session(session);
-      if (!product) {
-        throw new Error("Product missing during verification");
-      }
+
+      if (!product) throw new Error("Product missing");
 
       const variant = product.variants.find(
-        (v) => v.weight === item.variantWeight
+        (v) => v.weight === item.variant.weight,
       );
 
       if (!variant || variant.stock < item.quantity) {
-        throw new Error("Stock changed before payment verification");
+        throw new Error("Stock unavailable during verification");
       }
 
       variant.stock -= item.quantity;
       await product.save({ session });
-
-      subtotal += item.price * item.quantity;
-
-      orderItems.push({
-        product: product._id,
-        variant: { weight: variant.weight },
-        quantity: item.quantity,
-        priceAtPurchase: item.price,
-      });
     }
 
-    const tax = Math.round(subtotal * 0.12);
-    const deliveryCharge = calculateDeliveryCharge(snapshot.address.city);
-    const totalAmount = subtotal + tax + deliveryCharge;
+    /* ================= CLEAR CART ================= */
 
-    if (Math.round(totalAmount * 100) !== p.amount) {
-      throw new Error("Recalculated amount mismatch");
-    }
-
-    const now = new Date();
-
-    const [order] = await Order.create(
-      [
-        {
-          user: payment.user,
-          items: orderItems,
-          address: snapshot.address,
-          subtotal,
-          tax,
-          deliveryCharge,
-          totalAmount,
-          paymentMethod: snapshot.paymentMethod,
-          paymentStatus: "paid",
-          orderStatus: "preparing",
-          razorpay_order_id,
-          razorpay_payment_id: razorpay_payment_id,
-          statusHistory: [{ status: "paid", date: now }],
-        },
-      ],
-      { session }
+    await Cart.updateOne(
+      { user: order.user },
+      { $set: { items: [] } },
+      { session },
     );
 
-    /* -------- UPDATE PAYMENT -------- */
-    payment.order = order._id;
-    payment.status = "captured";
-    payment.signature_verified = true;
-    payment.order_created = true;
-    payment.ip = req.ip;
-    payment.userAgent = req.get("User-Agent");
+    /* ================= UPDATE ORDER ================= */
 
-    await payment.save({ session });
+    order.paymentStatus = "paid";
+    order.orderStatus = "placed";
+    order.razorpay_payment_id = razorpay_payment_id;
+    order.razorpay_signature = razorpay_signature;
+    order.paymentDetails = razorpayPayment;
+
+    order.statusHistory.push({
+      status: "placed",
+      date: new Date(),
+    });
+
+    await order.save({ session });
+
+    /* ================= UPDATE PAYMENT ================= */
+
+    await Payment.findOneAndUpdate(
+      { razorpay_order_id },
+      {
+        $set: {
+          razorpay_payment_id,
+          status: "captured",
+          signature_verified: true,
+          order: order._id,
+          ip: req.ip,
+          userAgent: req.get("User-Agent"),
+          raw: razorpayPayment,
+        },
+      },
+      { upsert: true, session },
+    );
 
     await session.commitTransaction();
 
@@ -274,10 +302,12 @@ export const verifyPayment = async (req, res) => {
     });
   } catch (err) {
     await session.abortTransaction();
-    console.error("verifyPayment error:", err.message);
+
+    console.error("verifyPayment error:", err);
+
     return res.status(500).json({
       ok: false,
-      message: "Verification failed",
+      message: "Payment verification failed",
     });
   } finally {
     session.endSession();
@@ -322,7 +352,9 @@ export const webhookHandler = async (req, res) => {
     if (String(p.currency).toUpperCase() !== "INR") {
       order.paymentStatus = "failed";
       await order.save();
-      try { await refundPayment(p.id); } catch {}
+      try {
+        await refundPayment(p.id);
+      } catch {}
       return res.status(200).send("non-inr-refunded");
     }
 
@@ -332,7 +364,9 @@ export const webhookHandler = async (req, res) => {
       if (issuerCountry && issuerCountry !== "IN") {
         order.paymentStatus = "failed";
         await order.save();
-        try { await refundPayment(p.id); } catch {}
+        try {
+          await refundPayment(p.id);
+        } catch {}
         return res.status(200).send("foreign-card-refunded");
       }
     }
@@ -359,7 +393,7 @@ export const webhookHandler = async (req, res) => {
           signatureVerified: true,
         },
       },
-      { upsert: true }
+      { upsert: true },
     );
 
     // Shipment creation (isolated)

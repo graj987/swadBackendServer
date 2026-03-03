@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 
-/* ---------------- REFUND SUB-SCHEMA ---------------- */
+/* ================= REFUND ================= */
+
 const RefundSchema = new mongoose.Schema(
   {
     refund_id: String,
@@ -11,7 +12,8 @@ const RefundSchema = new mongoose.Schema(
   { _id: false }
 );
 
-/* ---------------- CARD SUB-SCHEMA ---------------- */
+/* ================= CARD ================= */
+
 const CardSchema = new mongoose.Schema(
   {
     network: String,
@@ -23,22 +25,19 @@ const CardSchema = new mongoose.Schema(
   { _id: false }
 );
 
-/* ---------------- MAIN PAYMENT SCHEMA ---------------- */
+/* ================= PAYMENT ================= */
+
 const PaymentSchema = new mongoose.Schema(
   {
+    /* Razorpay IDs */
     razorpay_payment_id: {
       type: String,
-      required: true,
-      unique: true,
-      index: true,
+      sparse: true, // ⚠ remove unique here
     },
 
-    razorpay_order_id: {
-      type: String,
-      index: true,
-      required: true,
-    },
+    razorpay_order_id: String,
 
+    /* Relations */
     order: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Order",
@@ -48,10 +47,10 @@ const PaymentSchema = new mongoose.Schema(
     user: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
-      required: true,
-      index: true,
+      default: null,
     },
 
+    /* Amount */
     amount_paise: {
       type: Number,
       required: true,
@@ -75,135 +74,118 @@ const PaymentSchema = new mongoose.Schema(
         "refund_processing",
       ],
       default: "created",
-      index: true,
     },
 
-    card: { type: CardSchema, default: null },
-    vpa: String,
-    bank: String,
+    /* Lifecycle timestamps */
+    paidAt: Date,
+    failedAt: Date,
+    refundedAt: Date,
 
-    raw: {
-      type: mongoose.Schema.Types.Mixed,
-      default: {},
-    },
-
-    refunds: {
-      type: [RefundSchema],
-      default: [],
-    },
-
+    /* Verification */
     signature_verified: {
       type: Boolean,
       default: false,
-      index: true,
+    },
+
+    webhook_processed: {
+      type: Boolean,
+      default: false,
     },
 
     verification_notes: String,
     ip: String,
     userAgent: String,
 
+    /* Safe subset of Razorpay data */
+    notes: Object,
+
+    raw: {
+      type: Object,
+      select: false, // ⚡ prevents heavy payload fetch
+    },
+
     created_at_unix: Number,
     captured_at_unix: Number,
 
-    notes: {
-      type: mongoose.Schema.Types.Mixed,
-      default: {},
-    },
+    vpa: String,
+    bank: String,
 
-    meta: {
-      type: mongoose.Schema.Types.Mixed,
-      default: {},
-    },
+    card: CardSchema,
 
-    /* ENTERPRISE CHECKOUT SNAPSHOT */
-    checkout_snapshot: {
-      products: [
-        {
-          product: { type: mongoose.Schema.Types.ObjectId },
-          variantWeight: String,
-          quantity: Number,
-          price: Number,
-        },
-      ],
-      address: {
-        name: String,
-        phone: String,
-        line1: String,
-        city: String,
-        state: String,
-        pincode: String,
-      },
-      paymentMethod: String,
-    },
-
-    order_created: {
-      type: Boolean,
-      default: false,
-      index: true,
+    refunds: {
+      type: [RefundSchema],
+      default: [],
     },
   },
   { timestamps: true }
 );
 
-/* ---------------- STATIC: UPSERT FROM RAZORPAY ---------------- */
-PaymentSchema.statics.createOrUpdateFromRazorpay = async function (
-  p,
-  opts = {}
-) {
-  if (!p || !p.id) throw new Error("Invalid Razorpay payment object");
+/* ================= INDEXES (ONLY HERE) ================= */
 
-  const doc = {
-    razorpay_payment_id: p.id,
-    razorpay_order_id: p.order_id || null,
-    amount_paise: p.amount,
-    currency: p.currency,
-    method: p.method,
-    status: p.status,
-    raw: p,
-    signature_verified: !!opts.signatureVerified,
-    verification_notes: opts.verificationNotes || null,
-    ip: opts.ip || null,
-    userAgent: opts.userAgent || null,
-    notes: p.notes || {},
-    created_at_unix: p.created_at || null,
-    captured_at_unix: p.captured_at || null,
+PaymentSchema.index(
+  { razorpay_payment_id: 1 },
+  { unique: true, sparse: true }
+);
+
+PaymentSchema.index({ razorpay_order_id: 1 });
+
+PaymentSchema.index({ user: 1, createdAt: -1 }); // user history fast
+
+PaymentSchema.index({ order: 1 }); // order lookup
+
+/* ================= STATIC UPSERT ================= */
+
+PaymentSchema.statics.createOrUpdateFromRazorpay =
+  async function (p, opts = {}) {
+    if (!p?.id)
+      throw new Error("Invalid Razorpay payment object");
+
+    const doc = {
+      razorpay_payment_id: p.id,
+      razorpay_order_id: p.order_id || null,
+      amount_paise: p.amount,
+      currency: p.currency,
+      method: p.method,
+      status: p.status,
+      signature_verified: !!opts.signatureVerified,
+      verification_notes: opts.verificationNotes || null,
+      ip: opts.ip || null,
+      userAgent: opts.userAgent || null,
+      notes: p.notes || {},
+      created_at_unix: p.created_at || null,
+      captured_at_unix: p.captured_at || null,
+      raw: p,
+    };
+
+    /* lifecycle tracking */
+    if (p.status === "captured") doc.paidAt = new Date();
+    if (p.status === "failed") doc.failedAt = new Date();
+
+    if (p.method === "card" && p.card) {
+      doc.card = {
+        network: p.card.network,
+        brand: p.card.brand,
+        last4: p.card.last4,
+        issuer: p.card.issuer,
+        country: p.card.country,
+      };
+    }
+
+    if (p.vpa) doc.vpa = p.vpa;
+    if (p.bank) doc.bank = p.bank;
+
+    if (opts.orderRef) doc.order = opts.orderRef;
+    if (opts.userRef) doc.user = opts.userRef;
+
+    return this.findOneAndUpdate(
+      { razorpay_payment_id: p.id },
+      { $set: doc },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
   };
 
-  if (p.method === "card" && p.card) {
-    doc.card = {
-      network: p.card.network,
-      brand: p.card.brand,
-      last4: p.card.last4,
-      issuer: p.card.issuer,
-      country: p.card.country,
-    };
-  }
+/* ================= ADD REFUND ================= */
 
-  if (p.vpa) doc.vpa = p.vpa;
-  if (p.bank) doc.bank = p.bank;
-
-  if (Array.isArray(p.refunds?.items)) {
-    doc.refunds = p.refunds.items.map((r) => ({
-      refund_id: r.id,
-      amount_paise: r.amount,
-      status: r.status,
-      created_at: r.created_at
-        ? new Date(r.created_at * 1000)
-        : new Date(),
-    }));
-  }
-
-  if (opts.orderRef) doc.order = opts.orderRef;
-  if (opts.userRef) doc.user = opts.userRef;
-
-  return this.findOneAndUpdate(
-    { razorpay_payment_id: p.id },
-    { $set: doc },
-    { upsert: true, new: true, setDefaultsOnInsert: true }
-  );
-};
-
-/* ---------------- METHOD: ADD REFUND ---------------- */
 PaymentSchema.methods.addRefund = async function (r = {}) {
   this.refunds.push({
     refund_id: r.id || r.refund_id,
@@ -214,11 +196,13 @@ PaymentSchema.methods.addRefund = async function (r = {}) {
       : new Date(),
   });
 
-  if (r.status === "processed" || r.status === "completed") {
+  if (["processed", "completed"].includes(r.status)) {
     this.status = "refunded";
+    this.refundedAt = new Date();
   }
 
   return this.save();
 };
 
-export default mongoose.model("Payment", PaymentSchema);
+export default mongoose.models.Payment ||
+  mongoose.model("Payment", PaymentSchema);
