@@ -30,11 +30,7 @@ const CardSchema = new mongoose.Schema(
 const PaymentSchema = new mongoose.Schema(
   {
     /* Razorpay IDs */
-    razorpay_payment_id: {
-      type: String,
-      sparse: true, // ⚠ remove unique here
-    },
-
+    razorpay_payment_id: String, // ✅ NO sparse here
     razorpay_order_id: String,
 
     /* Relations */
@@ -42,18 +38,21 @@ const PaymentSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "Order",
       default: null,
+      
     },
 
     user: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       default: null,
+      
     },
 
     /* Amount */
     amount_paise: {
       type: Number,
       required: true,
+      min: 0,
     },
 
     currency: {
@@ -74,6 +73,7 @@ const PaymentSchema = new mongoose.Schema(
         "refund_processing",
       ],
       default: "created",
+      index: true,
     },
 
     /* Lifecycle timestamps */
@@ -90,18 +90,19 @@ const PaymentSchema = new mongoose.Schema(
     webhook_processed: {
       type: Boolean,
       default: false,
+      index: true,
     },
 
     verification_notes: String,
     ip: String,
     userAgent: String,
 
-    /* Safe subset of Razorpay data */
+    /* Safe Razorpay subset */
     notes: Object,
 
     raw: {
       type: Object,
-      select: false, // ⚡ prevents heavy payload fetch
+      select: false,
     },
 
     created_at_unix: Number,
@@ -122,71 +123,79 @@ const PaymentSchema = new mongoose.Schema(
 
 /* ================= INDEXES (ONLY HERE) ================= */
 
-PaymentSchema.index(
-  { razorpay_payment_id: 1 },
-  { unique: true, sparse: true }
-);
 
-PaymentSchema.index({ razorpay_order_id: 1 });
+PaymentSchema.index({ user: 1, createdAt: -1 });
 
-PaymentSchema.index({ user: 1, createdAt: -1 }); // user history fast
-
-PaymentSchema.index({ order: 1 }); // order lookup
+PaymentSchema.index({ order: 1 });
 
 /* ================= STATIC UPSERT ================= */
 
 PaymentSchema.statics.createOrUpdateFromRazorpay =
-  async function (p, opts = {}) {
-    if (!p?.id)
-      throw new Error("Invalid Razorpay payment object");
+async function (p, opts = {}) {
 
-    const doc = {
-      razorpay_payment_id: p.id,
-      razorpay_order_id: p.order_id || null,
-      amount_paise: p.amount,
-      currency: p.currency,
-      method: p.method,
-      status: p.status,
-      signature_verified: !!opts.signatureVerified,
-      verification_notes: opts.verificationNotes || null,
-      ip: opts.ip || null,
-      userAgent: opts.userAgent || null,
-      notes: p.notes || {},
-      created_at_unix: p.created_at || null,
-      captured_at_unix: p.captured_at || null,
-      raw: p,
-    };
+  if (!p?.id)
+    throw new Error("Invalid Razorpay payment object");
 
-    /* lifecycle tracking */
-    if (p.status === "captured") doc.paidAt = new Date();
-    if (p.status === "failed") doc.failedAt = new Date();
-
-    if (p.method === "card" && p.card) {
-      doc.card = {
-        network: p.card.network,
-        brand: p.card.brand,
-        last4: p.card.last4,
-        issuer: p.card.issuer,
-        country: p.card.country,
-      };
-    }
-
-    if (p.vpa) doc.vpa = p.vpa;
-    if (p.bank) doc.bank = p.bank;
-
-    if (opts.orderRef) doc.order = opts.orderRef;
-    if (opts.userRef) doc.user = opts.userRef;
-
-    return this.findOneAndUpdate(
-      { razorpay_payment_id: p.id },
-      { $set: doc },
-      { upsert: true, new: true, setDefaultsOnInsert: true }
-    );
+  const update = {
+    razorpay_payment_id: p.id,
+    razorpay_order_id: p.order_id || null,
+    amount_paise: p.amount,
+    currency: p.currency,
+    method: p.method,
+    status: p.status,
+    signature_verified: !!opts.signatureVerified,
+    verification_notes: opts.verificationNotes || null,
+    ip: opts.ip || null,
+    userAgent: opts.userAgent || null,
+    notes: p.notes || {},
+    created_at_unix: p.created_at || null,
+    captured_at_unix: p.captured_at || null,
+    raw: p,
   };
+
+  /* ✅ Correct timestamps from Razorpay */
+  if (p.status === "captured" && p.captured_at) {
+    update.paidAt = new Date(p.captured_at * 1000);
+  }
+
+  if (p.status === "failed" && p.created_at) {
+    update.failedAt = new Date(p.created_at * 1000);
+  }
+
+  /* Card info */
+  if (p.method === "card" && p.card) {
+    update.card = {
+      network: p.card.network,
+      brand: p.card.brand,
+      last4: p.card.last4,
+      issuer: p.card.issuer,
+      country: p.card.country,
+    };
+  }
+
+  if (p.vpa) update.vpa = p.vpa;
+  if (p.bank) update.bank = p.bank;
+
+  if (opts.orderRef) update.order = opts.orderRef;
+  if (opts.userRef) update.user = opts.userRef;
+
+  /* ✅ webhook-safe atomic upsert */
+  return this.findOneAndUpdate(
+    { razorpay_payment_id: p.id },
+    { $set: update },
+    {
+      upsert: true,
+      new: true,
+      setDefaultsOnInsert: true,
+      runValidators: true,
+    }
+  );
+};
 
 /* ================= ADD REFUND ================= */
 
 PaymentSchema.methods.addRefund = async function (r = {}) {
+
   this.refunds.push({
     refund_id: r.id || r.refund_id,
     amount_paise: r.amount || r.amount_paise || 0,
@@ -205,4 +214,4 @@ PaymentSchema.methods.addRefund = async function (r = {}) {
 };
 
 export default mongoose.models.Payment ||
-  mongoose.model("Payment", PaymentSchema);
+mongoose.model("Payment", PaymentSchema);

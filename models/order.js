@@ -10,12 +10,12 @@ const orderItemSchema = new mongoose.Schema(
       required: true,
     },
 
+    // snapshot (important for history safety)
+    productName: String,
+    productImage: String,
+
     variant: {
-      weight: {
-        type: String,
-        required: true,
-        trim: true,
-      },
+      weight: { type: String, required: true, trim: true },
     },
 
     quantity: {
@@ -84,10 +84,7 @@ const orderSchema = new mongoose.Schema(
       validate: v => Array.isArray(v) && v.length > 0,
     },
 
-    address: {
-      type: addressSchema,
-      required: true,
-    },
+    address: { type: addressSchema, required: true },
 
     /* PRICING */
     subtotal: { type: Number, required: true, min: 0 },
@@ -112,15 +109,8 @@ const orderSchema = new mongoose.Schema(
     paymentInitiatedAt: Date,
     paidAt: Date,
 
-    razorpay_order_id: {
-      type: String,
-      sparse: true,
-    },
-
-    razorpay_payment_id: {
-      type: String,
-      sparse: true,
-    },
+    razorpay_order_id: String,
+    razorpay_payment_id: String,
 
     razorpay_signature: {
       type: String,
@@ -145,11 +135,11 @@ const orderSchema = new mongoose.Schema(
       type: [
         {
           status: { type: String, enum: ORDER_STATUSES },
-          date: { type: Date, default: Date.now },
+          date: { type: Date },
         },
       ],
       default: () => [
-        { status: "created", date: Date.now() },
+        { status: "created", date: new Date() },
       ],
     },
 
@@ -160,10 +150,7 @@ const orderSchema = new mongoose.Schema(
       awb: String,
       courierName: String,
       courierId: String,
-      status: {
-        type: String,
-        default: "not_created",
-      },
+      status: { type: String, default: "not_created" },
     },
 
     /* META */
@@ -171,7 +158,6 @@ const orderSchema = new mongoose.Schema(
     orderNumber: {
       type: String,
       unique: true,
-      sparse: true,
     },
 
     orderMonth: Number,
@@ -198,25 +184,60 @@ const orderSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-/* ================= INDEXES (ONLY HERE) ================= */
+/* ================= AUTO ORDER NUMBER ================= */
+
+orderSchema.pre("save", function (next) {
+  if (!this.orderNumber) {
+    this.orderNumber =
+      "ORD-" + Date.now().toString().slice(-8);
+  }
+  next();
+});
+
+/* ================= STATUS HISTORY SYNC ================= */
+
+orderSchema.pre("save", function (next) {
+  const last =
+    this.statusHistory[this.statusHistory.length - 1];
+
+  if (!last || last.status !== this.orderStatus) {
+    this.statusHistory.push({
+      status: this.orderStatus,
+      date: new Date(),
+    });
+  }
+  next();
+});
+
+/* ================= INDEXES ================= */
 
 orderSchema.index({ user: 1, createdAt: -1 });
-
 orderSchema.index({ paymentStatus: 1, createdAt: -1 });
-
-orderSchema.index(
-  { razorpay_order_id: 1 },
-  { sparse: true }
-);
+orderSchema.index({ orderStatus: 1, createdAt: -1 });
 
 orderSchema.index(
   { razorpay_payment_id: 1 },
-  { sparse: true }
+  {
+    unique: true,
+    partialFilterExpression: {
+      razorpay_payment_id: { $exists: true },
+    },
+  }
+);
+
+orderSchema.index(
+  { razorpay_order_id: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      razorpay_order_id: { $exists: true },
+    },
+  }
 );
 
 orderSchema.index({ orderMonth: 1, orderYear: 1 });
 
-/* ================= SAFE EXPORT ================= */
+/* ================= EXPORT ================= */
 
 export default mongoose.models.Order ||
   mongoose.model("Order", orderSchema);
