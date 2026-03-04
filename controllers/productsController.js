@@ -287,20 +287,50 @@ export const addReview = async (req, res) => {
 
 export const getLatestProducts = async (req, res) => {
   try {
-    const products = await Product.find({})
+    const products = await Product.find({
+      isAvailable: true
+    })
       .sort({ createdAt: -1 })
-      .limit(8);
+      .limit(8)
+      .select(
+        "name category image variants rating numReviews deal isFeatured createdAt"
+      )
+      .lean();
+
+    const formattedProducts = products.map((product) => {
+      const basePrice = product.variants?.[0]?.price || 0;
+
+      let finalPrice = basePrice;
+
+      if (
+        product.deal?.isActive &&
+        product.deal?.discountPercent &&
+        new Date() >= new Date(product.deal.startAt) &&
+        new Date() <= new Date(product.deal.endAt)
+      ) {
+        finalPrice = Math.round(
+          basePrice - (basePrice * product.deal.discountPercent) / 100
+        );
+      }
+
+      return {
+        ...product,
+        basePrice,
+        finalPrice,
+      };
+    });
 
     res.status(200).json({
       success: true,
-      data: products,
+      count: formattedProducts.length,
+      data: formattedProducts,
     });
   } catch (error) {
     console.error("LATEST PRODUCTS ERROR:", error);
 
     res.status(500).json({
       success: false,
-      message: "Failed to load latest products",
+      message: "Server error while fetching latest products",
     });
   }
 };

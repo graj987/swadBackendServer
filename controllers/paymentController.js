@@ -6,6 +6,7 @@ import dotenv from "dotenv";
 import Product from "../models/productModel.js";
 import mongoose from "mongoose";
 import Address from "../models/address.js";
+import Cart from "../models/cart.js";
 
 import Order from "../models/order.js";
 import Payment from "../models/payment.js";
@@ -49,17 +50,19 @@ export const createRazorpayOrder = async (req, res) => {
     const userId = req.user?.id;
     const { orderId } = req.body;
 
-    if (!userId)
+    if (!userId) {
       return res.status(401).json({
         ok: false,
         message: "Unauthorized",
       });
+    }
 
-    if (!orderId)
+    if (!orderId) {
       return res.status(400).json({
         ok: false,
-        message: "orderId required",
+        message: "Order ID required",
       });
+    }
 
     /* ================= FIND ORDER ================= */
 
@@ -68,11 +71,12 @@ export const createRazorpayOrder = async (req, res) => {
       user: userId,
     });
 
-    if (!order)
+    if (!order) {
       return res.status(404).json({
         ok: false,
         message: "Order not found",
       });
+    }
 
     /* ================= ALREADY PAID ================= */
 
@@ -81,6 +85,20 @@ export const createRazorpayOrder = async (req, res) => {
         ok: true,
         alreadyPaid: true,
         orderId: order._id,
+      });
+    }
+
+    /* ================= REUSE EXISTING RAZORPAY ORDER ================= */
+
+    if (order.razorpay_order_id && order.paymentStatus === "processing") {
+      return res.json({
+        ok: true,
+        razorpayOrder: {
+          id: order.razorpay_order_id,
+          amount: Math.round(order.totalAmount * 100),
+          currency: "INR",
+        },
+        reused: true,
       });
     }
 
@@ -139,6 +157,7 @@ export const createRazorpayOrder = async (req, res) => {
       ok: true,
       razorpayOrder: razorOrder,
     });
+
   } catch (err) {
     console.error("createRazorpayOrder error:", err);
 
@@ -153,13 +172,15 @@ export const verifyPayment = async (req, res) => {
   const session = await mongoose.startSession();
 
   try {
-    session.startTransaction();
+    const {
+      razorpay_payment_id,
+      razorpay_order_id,
+      razorpay_signature,
+    } = req.body;
 
-    const { razorpay_payment_id, razorpay_order_id, razorpay_signature } =
-      req.body;
+    /* ================= BASIC VALIDATION ================= */
 
     if (!razorpay_payment_id || !razorpay_order_id || !razorpay_signature) {
-      await session.abortTransaction();
       return res.status(400).json({
         ok: false,
         message: "Missing payment fields",
@@ -174,32 +195,13 @@ export const verifyPayment = async (req, res) => {
       .digest("hex");
 
     if (expectedSignature !== razorpay_signature) {
-      await session.abortTransaction();
       return res.status(400).json({
         ok: false,
         message: "Invalid signature",
       });
     }
 
-    /* ================= FETCH PAYMENT FROM RAZORPAY ================= */
-
-    const { data: razorpayPayment } = await axios.get(
-      `https://api.razorpay.com/v1/payments/${razorpay_payment_id}`,
-      {
-        auth: {
-          username: RZ_KEY_ID,
-          password: RZ_KEY_SECRET,
-        },
-      },
-    );
-
-    if (razorpayPayment.status !== "captured") {
-      await session.abortTransaction();
-      return res.status(400).json({
-        ok: false,
-        message: "Payment not captured",
-      });
-    }
+    session.startTransaction();
 
     /* ================= FIND ORDER ================= */
 
@@ -226,39 +228,68 @@ export const verifyPayment = async (req, res) => {
       });
     }
 
+    /* ================= FETCH PAYMENT FROM RAZORPAY ================= */
+
+    const { data: razorpayPayment } = await axios.get(
+      `https://api.razorpay.com/v1/payments/${razorpay_payment_id}`,
+      {
+        auth: {
+          username: RZ_KEY_ID,
+          password: RZ_KEY_SECRET,
+        },
+      }
+    );
+
+    if (!razorpayPayment) {
+      throw new Error("Unable to fetch Razorpay payment");
+    }
+
+    if (razorpayPayment.status !== "captured") {
+      throw new Error("Payment not captured");
+    }
+
+    if (razorpayPayment.currency !== "INR") {
+      throw new Error("Invalid payment currency");
+    }
+
     /* ================= AMOUNT VALIDATION ================= */
 
     const expectedAmountPaise = Math.round(order.totalAmount * 100);
 
-    if (expectedAmountPaise !== razorpayPayment.amount) {
-      throw new Error("Amount mismatch detected");
+    if (razorpayPayment.amount !== expectedAmountPaise) {
+      throw new Error("Payment amount mismatch");
     }
 
-    /* ================= STOCK LOCK + DEDUCT ================= */
+    /* ================= STOCK VALIDATION ================= */
 
     for (const item of order.items) {
       const product = await Product.findById(item.product).session(session);
 
-      if (!product) throw new Error("Product missing");
+      if (!product) throw new Error("Product not found");
 
       const variant = product.variants.find(
-        (v) => v.weight === item.variant.weight,
+        (v) => v.weight === item.variant.weight
       );
 
-      if (!variant || variant.stock < item.quantity) {
-        throw new Error("Stock unavailable during verification");
+      if (!variant) {
+        throw new Error("Product variant missing");
+      }
+
+      if (variant.stock < item.quantity) {
+        throw new Error("Insufficient stock");
       }
 
       variant.stock -= item.quantity;
+
       await product.save({ session });
     }
 
-    /* ================= CLEAR CART ================= */
+    /* ================= CLEAR USER CART ================= */
 
     await Cart.updateOne(
       { user: order.user },
       { $set: { items: [] } },
-      { session },
+      { session }
     );
 
     /* ================= UPDATE ORDER ================= */
@@ -276,7 +307,7 @@ export const verifyPayment = async (req, res) => {
 
     await order.save({ session });
 
-    /* ================= UPDATE PAYMENT ================= */
+    /* ================= UPDATE PAYMENT RECORD ================= */
 
     await Payment.findOneAndUpdate(
       { razorpay_order_id },
@@ -291,7 +322,7 @@ export const verifyPayment = async (req, res) => {
           raw: razorpayPayment,
         },
       },
-      { upsert: true, session },
+      { upsert: true, session }
     );
 
     await session.commitTransaction();
@@ -300,6 +331,7 @@ export const verifyPayment = async (req, res) => {
       ok: true,
       orderId: order._id,
     });
+
   } catch (err) {
     await session.abortTransaction();
 
@@ -307,7 +339,7 @@ export const verifyPayment = async (req, res) => {
 
     return res.status(500).json({
       ok: false,
-      message: "Payment verification failed",
+      message: err.message || "Payment verification failed",
     });
   } finally {
     session.endSession();
