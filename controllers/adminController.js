@@ -548,3 +548,33 @@ export const uploadImage = async (req, res) => {
     });
   }
 };
+
+export const getDashboardData = async (req, res) => {
+  try {
+    const stats = await getAdminStats(); 
+    const orders = await Order.find()
+      .sort({ createdAt: -1 })
+      .limit(5);
+
+    const notifications = await Notification.find()
+      .sort({ createdAt: -1 })
+      .limit(5);
+
+    res.json({
+      success: true,
+      data: {
+        stats,
+        orders,
+        notifications
+      }
+    });
+
+  } catch (err) {
+    console.error("Dashboard error:", err);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to load dashboard"
+    });
+  }
+};

@@ -20,6 +20,7 @@ import {
   updateOrderStatus,
   setHeroProduct,
   getHeroProduct,
+  getDashboardData,
  
 } from "../controllers/adminController.js";
 
@@ -52,6 +53,7 @@ router.get("/users/count", protectAdmin, usersCount);
 
 // Stats
 router.get("/stats", protectAdmin, getStats);
+router.get("/dashboard", protectAdmin, getDashboardData);
 
 // ------------------- PRODUCTS -------------------
 router.get("/products", protectAdmin, getProducts);
