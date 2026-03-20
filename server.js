@@ -42,6 +42,7 @@ app.use(helmet());
 app.use(cors({
   origin: [
     "http://localhost:5173",
+    "http://localhost:5174",
     "https://swadbest.com",
     "https://www.swadbest.com",
     "https://swadbestadminpannel.onrender.com"

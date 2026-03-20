@@ -1,150 +1,153 @@
 // emailService.js
-import { Resend } from "resend";
-import dotenv from "dotenv";
+// ─────────────────────────────────────────────────────────────────
+//  SwadBest — Central Email Service
+//  All transactional emails go through here.
+//  Templates are in /emails/*.hbs
+//  Renderer: handlebars (same as verifyMail.js)
+// ─────────────────────────────────────────────────────────────────
+
+import { Resend }       from "resend";
+import dotenv           from "dotenv";
+import fs               from "fs";
+import path             from "path";
+import { fileURLToPath } from "url";
+import handlebars       from "handlebars";
+
 dotenv.config();
+
+const __filename    = fileURLToPath(import.meta.url);
+const __dirname     = path.dirname(__filename);
+const TEMPLATES_DIR = path.join(__dirname, "emails");
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
-// ---------- 1. WELCOME EMAIL ----------
+const FROM_DEFAULT  = "SwadBest <no-reply@swadbest.com>";
+const FROM_SECURITY = "SwadBest Security <security@swadbest.com>";
+const FROM_SUPPORT  = "SwadBest <support@swadbest.com>";
+const SHOP_URL      = process.env.FRONTEND_URL || "https://swadbest.com";
+
+// ─────────────────────────────────────────────────────────────────
+//  Template loader with in-memory cache
+// ─────────────────────────────────────────────────────────────────
+const _cache = new Map();
+
+function loadTemplate(name) {
+  if (_cache.has(name)) return _cache.get(name);
+  const filePath = path.join(TEMPLATES_DIR, `${name}.hbs`);
+  const source   = fs.readFileSync(filePath, "utf-8");
+  const compiled = handlebars.compile(source);
+  _cache.set(name, compiled);
+  return compiled;
+}
+
+function render(templateName, data) {
+  const template = loadTemplate(templateName);
+  return template({ ...data, year: new Date().getFullYear() });
+}
+
+// ─────────────────────────────────────────────────────────────────
+//  Generic send wrapper — handles logging + error isolation
+// ─────────────────────────────────────────────────────────────────
+async function sendEmail({ from, to, subject, html, label }) {
+  try {
+    await resend.emails.send({ from, to, subject, html });
+    console.log(`[Email] ✅ ${label} → ${to}`);
+    return true;
+  } catch (err) {
+    console.error(`[Email] ❌ ${label} failed for ${to}:`, err.message);
+    return false;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────
+//  1. WELCOME EMAIL
+// ─────────────────────────────────────────────────────────────────
 export const sendWelcomeEmail = async (email, name) => {
-  try {
-    const html = `
-    <div style="font-family: Arial; max-width:600px; margin:20px auto; padding:25px; border:1px solid #eee; border-radius:10px;">
-      <h2 style="text-align:center; color:#28a745;">Welcome to SwadBest, ${name}!</h2>
+  const html = render("welcome", {
+    name,
+    shopUrl: SHOP_URL,
+  });
 
-      <p>Hello ${name},</p>
-      <p>Thank you for joining SwadBest. Your account is now verified and ready to use.</p>
-      <p>We're excited to have you with us 🎉</p>
-
-      <p style="margin-top:30px; color:#777; font-size:14px; text-align:center;">
-        © ${new Date().getFullYear()} SwadBest — Eat Fresh, Eat Best.
-      </p>
-    </div>
-    `;
-
-    await resend.emails.send({
-      from: "SwadBest <onboarding@resend.dev>",
-      to: email,
-      subject: "Welcome to SwadBest 🎉",
-      html,
-    });
-
-    console.log("Welcome email sent →", email);
-    return true;
-
-  } catch (err) {
-    console.error("WelcomeMail error:", err.message);
-    return false;
-  }
+  return sendEmail({
+    from:    FROM_DEFAULT,
+    to:      email,
+    subject: `Welcome to SwadBest, ${name}! 🎉`,
+    html,
+    label:   "WelcomeEmail",
+  });
 };
 
-
-// ---------- 2. LOGIN NOTIFICATION EMAIL ----------
+// ─────────────────────────────────────────────────────────────────
+//  2. LOGIN NOTIFICATION
+// ─────────────────────────────────────────────────────────────────
 export const sendLoginNotification = async (email, ip, device) => {
-  try {
-    const html = `
-    <div style="font-family: Arial; max-width:600px; margin:20px auto; padding:25px; border:1px solid #eee; border-radius:10px;">
-      <h2 style="text-align:center; color:#28a745;">New Login Detected</h2>
+  const html = render("security", {
+    accentColor:  "linear-gradient(90deg,#ea580c,#f97316)",
+    icon:         "🔔",
+    subject:      "New Login Detected",
+    preheader:    `A new login was detected on your SwadBest account from ${device}.`,
+    heading:      "New login to your account",
+    bodyText:     `Hello,<br/><br/>A new sign-in was detected on your <strong>SwadBest</strong> account. Here are the details:`,
+    showDetails:  true,
+    device,
+    ip,
+    time:         new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }) + " IST",
+    warningText:  "Please reset your password immediately and contact our support team.",
+  });
 
-      <p>Hello,</p>
-      <p>A new login was detected on your SwadBest account.</p>
-
-      <div style="background:#f1fff3; padding:15px; border-radius:8px; border:1px solid #c3efc8;">
-        <p><strong>Device:</strong> ${device}</p>
-        <p><strong>IP Address:</strong> ${ip}</p>
-        <p><strong>Time:</strong> ${new Date().toLocaleString()}</p>
-      </div>
-
-      <p>If this wasn't you, please reset your password immediately.</p>
-
-      <p style="margin-top:30px; color:#777; font-size:14px; text-align:center;">
-        © ${new Date().getFullYear()} SwadBest Security
-      </p>
-    </div>
-    `;
-
-    await resend.emails.send({
-      from: "SwadBest Security <onboarding@resend.dev>",
-      to: email,
-      subject: "New Login to Your SwadBest Account",
-      html,
-    });
-
-    console.log("Login notification sent →", email);
-    return true;
-
-  } catch (err) {
-    console.error("LoginNotification error:", err.message);
-    return false;
-  }
+  return sendEmail({
+    from:    FROM_SECURITY,
+    to:      email,
+    subject: "New Login to Your SwadBest Account",
+    html,
+    label:   "LoginNotification",
+  });
 };
 
-
-// ---------- 3. PASSWORD CHANGE CONFIRMATION EMAIL ----------
+// ─────────────────────────────────────────────────────────────────
+//  3. PASSWORD CHANGED
+// ─────────────────────────────────────────────────────────────────
 export const sendPasswordChangedEmail = async (email) => {
-  try {
-    const html = `
-    <div style="font-family: Arial; max-width:600px; margin:20px auto; padding:25px; border:1px solid #eee; border-radius:10px;">
-      <h2 style="text-align:center; color:#28a745;">Password Updated Successfully</h2>
+  const html = render("security", {
+    accentColor:  "linear-gradient(90deg,#ea580c,#f97316)",
+    icon:         "🔑",
+    subject:      "Password Updated",
+    preheader:    "Your SwadBest account password was changed successfully.",
+    heading:      "Your password was changed",
+    bodyText:     "This is a confirmation that the password for your <strong>SwadBest</strong> account was successfully updated.",
+    showDetails:  false,
+    warningText:  "Please reset your password again immediately and contact our support team at support@swadbest.com.",
+  });
 
-      <p>Hello,</p>
-      <p>This is to confirm that your SwadBest account password was changed successfully.</p>
-
-      <p>If you did not make this change, please reset your password immediately.</p>
-
-      <p style="margin-top:30px; color:#777; font-size:14px; text-align:center;">
-        © ${new Date().getFullYear()} SwadBest Security
-      </p>
-    </div>
-    `;
-
-    await resend.emails.send({
-      from: "SwadBest Security <onboarding@resend.dev>",
-      to: email,
-      subject: "Your SwadBest Password Has Been Updated",
-      html,
-    });
-
-    console.log("Password change email sent →", email);
-    return true;
-
-  } catch (err) {
-    console.error("PasswordChanged error:", err.message);
-    return false;
-  }
+  return sendEmail({
+    from:    FROM_SECURITY,
+    to:      email,
+    subject: "Your SwadBest Password Has Been Updated",
+    html,
+    label:   "PasswordChanged",
+  });
 };
 
-
-// ---------- 4. ACCOUNT DELETED EMAIL ----------
+// ─────────────────────────────────────────────────────────────────
+//  4. ACCOUNT DELETED
+// ─────────────────────────────────────────────────────────────────
 export const sendAccountDeletedEmail = async (email) => {
-  try {
-    const html = `
-    <div style="font-family: Arial; max-width:600px; margin:20px auto; padding:25px; border:1px solid #eee; border-radius:10px;">
-      <h2 style="text-align:center; color:#d9534f;">Account Deleted</h2>
+  const html = render("security", {
+    accentColor:  "linear-gradient(90deg,#dc2626,#ef4444)",
+    icon:         "🗑️",
+    subject:      "Account Deleted",
+    preheader:    "Your SwadBest account has been permanently deleted.",
+    heading:      "Your account has been deleted",
+    bodyText:     "Your <strong>SwadBest</strong> account and all associated data have been permanently deleted as requested.",
+    showDetails:  false,
+    warningText:  "If you did not request account deletion, contact our support team immediately at support@swadbest.com.",
+  });
 
-      <p>Hello,</p>
-      <p>Your SwadBest account has been successfully deleted as requested.</p>
-
-      <p>If you did not request this action, contact our support team immediately.</p>
-
-      <p style="margin-top:30px; color:#777; font-size:14px; text-align:center;">
-        © ${new Date().getFullYear()} SwadBest Support
-      </p>
-    </div>
-    `;
-
-    await resend.emails.send({
-      from: "SwadBest Support <onboarding@resend.dev>",
-      to: email,
-      subject: "Your SwadBest Account Has Been Deleted",
-      html,
-    });
-
-    console.log("Account deletion email sent →", email);
-    return true;
-
-  } catch (err) {
-    console.error("AccountDeleted error:", err.message);
-    return false;
-  }
+  return sendEmail({
+    from:    FROM_SUPPORT,
+    to:      email,
+    subject: "Your SwadBest Account Has Been Deleted",
+    html,
+    label:   "AccountDeleted",
+  });
 };

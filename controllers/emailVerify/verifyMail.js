@@ -1,46 +1,50 @@
-import { Resend } from "resend";
-import dotenv from "dotenv";
-dotenv.config();
-import fs from "fs";
-import path from "path";
-import { fileURLToPath } from "url";
-import handlebars from "handlebars";
+// verifyMail.js
+// ─────────────────────────────────────────────────────────────────
+//  Email verification mailer
+//  Template: emails/verify-email.hbs
+// ─────────────────────────────────────────────────────────────────
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+import { Resend }        from "resend";
+import dotenv            from "dotenv";
+import fs                from "fs";
+import path              from "path";
+import { fileURLToPath } from "url";
+import handlebars        from "handlebars";
+
+dotenv.config();
+
+const __filename    = fileURLToPath(import.meta.url);
+const __dirname     = path.dirname(__filename);
+const TEMPLATE_PATH = path.join(__dirname, "emails", "verify-email.hbs");
 
 const FRONTEND_VERIFY_URL = process.env.FRONTEND_URL + "/verify";
-
 const resend = new Resend(process.env.RESEND_API_KEY);
 
 export const verifyMail = async (token, email) => {
   try {
-    // Load HTML template
-    const templatePath = path.join(__dirname, "template.hbs");
-    const emailTemplateSource = fs.readFileSync(templatePath, "utf-8");
-    const template = handlebars.compile(emailTemplateSource);
+    const source   = fs.readFileSync(TEMPLATE_PATH, "utf-8");
+    const template = handlebars.compile(source);
 
-    // Build verification URL
     const verifyLink = `${FRONTEND_VERIFY_URL}?token=${encodeURIComponent(token)}`;
 
-    const htmlToSend = template({
+    const html = template({
       verifyLink,
+      email,       // shown in "belongs to {{email}}" line
       year: new Date().getFullYear(),
     });
 
-    // Send email via Resend
     await resend.emails.send({
-      from: "SwadBest <no-reply@swadbest.com>",
-      to: email,
-      subject: "Verify Your Email",
-      html: htmlToSend,
+      from:    "SwadBest <no-reply@swadbest.com>",
+      to:      email,
+      subject: "Verify Your SwadBest Email Address",
+      html,
     });
 
-    console.log("Verification email sent →", email);
+    console.log("[Email] ✅ Verification email sent →", email);
     return true;
 
   } catch (err) {
-    console.error("verifyMail error:", err.message);
+    console.error("[Email] ❌ verifyMail failed:", err.message);
     return false;
   }
 };

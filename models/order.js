@@ -30,7 +30,7 @@ const orderItemSchema = new mongoose.Schema(
       min: 0,
     },
   },
-  { _id: false }
+  { _id: false },
 );
 
 /* ================= ADDRESS SNAPSHOT ================= */
@@ -45,7 +45,7 @@ const addressSchema = new mongoose.Schema(
     pincode: { type: String, required: true },
     country: { type: String, default: "India" },
   },
-  { _id: false }
+  { _id: false },
 );
 
 /* ================= CONSTANTS ================= */
@@ -81,7 +81,7 @@ const orderSchema = new mongoose.Schema(
     items: {
       type: [orderItemSchema],
       required: true,
-      validate: v => Array.isArray(v) && v.length > 0,
+      validate: (v) => Array.isArray(v) && v.length > 0,
     },
 
     address: { type: addressSchema, required: true },
@@ -138,19 +138,25 @@ const orderSchema = new mongoose.Schema(
           date: { type: Date },
         },
       ],
-      default: () => [
-        { status: "created", date: new Date() },
-      ],
+      default: () => [{ status: "created", date: new Date() }],
     },
 
     /* SHIPPING */
 
     shipping: {
-      shipmentId: String,
-      awb: String,
+      shipmentId: Number,
+      awb: { type: String, index: true },
       courierName: String,
-      courierId: String,
-      status: { type: String, default: "not_created" },
+      courierId: Number,
+      trackingUrl: String,
+      pickupScheduledDate: Date,
+      labelUrl: String,
+      manifestUrl: String,
+      invoiceUrl: String,
+      status: {
+        type: String,
+        default: "not_created",
+      },
     },
 
     /* META */
@@ -181,15 +187,14 @@ const orderSchema = new mongoose.Schema(
     trafficSource: String,
     sessionId: String,
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 /* ================= AUTO ORDER NUMBER ================= */
 
 orderSchema.pre("save", function (next) {
   if (!this.orderNumber) {
-    this.orderNumber =
-      "ORD-" + Date.now().toString().slice(-8);
+    this.orderNumber = "ORD-" + Date.now().toString().slice(-8);
   }
   next();
 });
@@ -197,8 +202,7 @@ orderSchema.pre("save", function (next) {
 /* ================= STATUS HISTORY SYNC ================= */
 
 orderSchema.pre("save", function (next) {
-  const last =
-    this.statusHistory[this.statusHistory.length - 1];
+  const last = this.statusHistory[this.statusHistory.length - 1];
 
   if (!last || last.status !== this.orderStatus) {
     this.statusHistory.push({
@@ -222,7 +226,7 @@ orderSchema.index(
     partialFilterExpression: {
       razorpay_payment_id: { $exists: true },
     },
-  }
+  },
 );
 
 orderSchema.index(
@@ -232,12 +236,11 @@ orderSchema.index(
     partialFilterExpression: {
       razorpay_order_id: { $exists: true },
     },
-  }
+  },
 );
 
 orderSchema.index({ orderMonth: 1, orderYear: 1 });
 
 /* ================= EXPORT ================= */
 
-export default mongoose.models.Order ||
-  mongoose.model("Order", orderSchema);
+export default mongoose.models.Order || mongoose.model("Order", orderSchema);

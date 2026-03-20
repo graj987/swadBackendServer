@@ -1,8 +1,6 @@
 // routes/orderRoutes.js
 import express from "express";
 import {
-
-  createOrder,
   getOrdersCount,
   getMyOrders,
   getOrderById,
@@ -13,6 +11,7 @@ import {
 import { isAuthenticated } from "../middleware/auth.js";
 import { getPricePreview } from "../controllers/pricePreviewController.js";
 import { generateInvoice } from "../controllers/generateInvoice.js";
+import {createOrder} from "../controllers/createOrderController.js"
 
 const router = express.Router();
 
