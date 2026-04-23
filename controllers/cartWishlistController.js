@@ -235,19 +235,46 @@ export const moveWishlistToCart = async (req, res) => {
 /* ================= COUNTS ================= */
 export const getCounts = async (req, res) => {
   try {
-    const cart = await Cart.findOne({ user: req.user.id });
+    if (!req.user || !req.user.id) {
+      return res.status(401).json({
+        message: "Unauthorized: user not found"
+      });
+    }
 
-    const wishlist = await Wishlist.findOne({ user: req.user.id });
+    console.log("Fetching counts for user:", req.user.id);
 
-    const cartCount = cart
-      ? cart.items.reduce((s, i) => s + i.quantity, 0)
-      : 0;
+    const cart = await Cart.findOne({
+      user: req.user.id
+    });
 
-    const wishlistCount = wishlist ? wishlist.products.length : 0;
+    const wishlist = await Wishlist.findOne({
+      user: req.user.id
+    });
 
-    res.json({ cartCount, wishlistCount });
-  } catch {
-    res.json({ cartCount: 0, wishlistCount: 0 });
+    // Safer reduce (in case items is missing)
+    const cartCount =
+      cart?.items?.reduce(
+        (sum, item) => sum + (item.quantity || 0),
+        0
+      ) || 0;
+
+    // Safe length access
+    const wishlistCount =
+      wishlist?.products?.length || 0;
+
+    return res.status(200).json({
+      cartCount,
+      wishlistCount
+    });
+
+  } catch (err) {
+
+    console.error("getCounts Error:", err);
+
+    return res.status(500).json({
+      message: "Failed to fetch cart/wishlist counts",
+      error: err.message
+    });
   }
 };
 
