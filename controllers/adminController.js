@@ -16,7 +16,16 @@ cloudinary.v2.config({
 const uploadBufferToCloudinary = (buffer, folder = "products") =>
   new Promise((resolve, reject) => {
     const uploadStream = cloudinary.v2.uploader.upload_stream(
-      { folder },
+      {
+  folder,
+  resource_type: "image",
+  transformation: [
+    {
+      fetch_format: "auto",
+      quality: "auto",
+    },
+  ],
+},
       (err, result) => {
         if (err) return reject(err);
         resolve(result);

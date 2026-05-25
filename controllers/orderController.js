@@ -12,168 +12,168 @@ import TrafficLog from "../models/TraficLog.js";
 import Cart from "../models/cart.js";
 
 /* ================= CREATE ORDER ================= */
-export const createOrder = async (req, res) => {
-  const session = await mongoose.startSession();
+// export const createOrder = async (req, res) => {
+//   const session = await mongoose.startSession();
 
-  try {
-    session.startTransaction();
+//   try {
+//     session.startTransaction();
 
-    const userId = req.user.id;
-    const {
-      addressId,
-      paymentMethod = "COD",
-      trafficSource,
-      sessionId,
-    } = req.body;
+//     const userId = req.user.id;
+//     const {
+//       addressId,
+//       paymentMethod = "COD",
+//       trafficSource,
+//       sessionId,
+//     } = req.body;
 
-    if (!userId) throw { status: 401, message: "Unauthorized" };
+//     if (!userId) throw { status: 401, message: "Unauthorized" };
 
-    /* ================= CART ================= */
+//     /* ================= CART ================= */
 
-    const cartDoc = await Cart.findOne({ user: userId })
-      .session(session)
-      .lean(false);
+//     const cartDoc = await Cart.findOne({ user: userId })
+//       .session(session)
+//       .lean(false);
 
-    if (!cartDoc || cartDoc.items.length === 0) {
-      throw { status: 400, message: "Cart empty" };
-    }
+//     if (!cartDoc || cartDoc.items.length === 0) {
+//       throw { status: 400, message: "Cart empty" };
+//     }
 
-    /* ================= ADDRESS ================= */
+//     /* ================= ADDRESS ================= */
 
-    const address = await Address.findOne({
-      _id: addressId,
-      userId,
-    }).session(session);
+//     const address = await Address.findOne({
+//       _id: addressId,
+//       userId,
+//     }).session(session);
 
-    if (!address) throw { status: 404, message: "Address not found" };
+//     if (!address) throw { status: 404, message: "Address not found" };
 
-    const formattedAddress = {
-      name: address.name.trim(),
-      phone: address.phone,
-      line1: `${address.house}, ${address.street}`,
-      city: address.city.trim(),
-      state: address.state.trim(),
-      pincode: String(address.pincode),
-      country: "India",
-    };
+//     const formattedAddress = {
+//       name: address.name.trim(),
+//       phone: address.phone,
+//       line1: `${address.house}, ${address.street}`,
+//       city: address.city.trim(),
+//       state: address.state.trim(),
+//       pincode: String(address.pincode),
+//       country: "India",
+//     };
 
-    /* ================= PAYMENT VALIDATION ================= */
+//     /* ================= PAYMENT VALIDATION ================= */
 
-    if (!["COD", "Online"].includes(paymentMethod)) {
-      throw { status: 400, message: "Invalid payment method" };
-    }
+//     if (!["COD", "Online"].includes(paymentMethod)) {
+//       throw { status: 400, message: "Invalid payment method" };
+//     }
 
-    const user = await User.findById(userId).session(session);
+//     const user = await User.findById(userId).session(session);
 
-    if (paymentMethod === "COD" && !user.codEligible) {
-      throw { status: 400, message: "COD not allowed" };
-    }
+//     if (paymentMethod === "COD" && !user.codEligible) {
+//       throw { status: 400, message: "COD not allowed" };
+//     }
 
-    /* ================= PRICE + STOCK ================= */
+//     /* ================= PRICE + STOCK ================= */
 
-    let subtotal = 0;
-    const orderItems = [];
+//     let subtotal = 0;
+//     const orderItems = [];
 
-    for (const item of cartDoc.items) {
-      const product = await Product.findById(item.product).session(session);
+//     for (const item of cartDoc.items) {
+//       const product = await Product.findById(item.product).session(session);
 
-      if (!product) throw { status: 400, message: "Invalid product" };
+//       if (!product) throw { status: 400, message: "Invalid product" };
 
-      const variant = product.variants.find(
-        (v) => v.weight === item.variant.weight,
-      );
+//       const variant = product.variants.find(
+//         (v) => v.weight === item.variant.weight,
+//       );
 
-      if (!variant || variant.stock < item.quantity) {
-        throw {
-          status: 409,
-          message: `${product.name} out of stock`,
-        };
-      }
+//       if (!variant || variant.stock < item.quantity) {
+//         throw {
+//           status: 409,
+//           message: `${product.name} out of stock`,
+//         };
+//       }
 
-      subtotal += variant.price * item.quantity;
+//       subtotal += variant.price * item.quantity;
 
-      orderItems.push({
-        product: product._id,
-        variant: { weight: variant.weight },
-        quantity: item.quantity,
-        priceAtPurchase: variant.price,
-      });
-    }
+//       orderItems.push({
+//         product: product._id,
+//         variant: { weight: variant.weight },
+//         quantity: item.quantity,
+//         priceAtPurchase: variant.price,
+//       });
+//     }
 
-    /* ================= CHARGES ================= */
+//     /* ================= CHARGES ================= */
 
-    const deliveryCharge = calculateDeliveryCharge(address.city);
-    const tax = Math.round(subtotal * 0.12);
-    const codCharge = paymentMethod === "COD" ? 20 : 0;
+//     const deliveryCharge = calculateDeliveryCharge(address.city);
+//     const tax = Math.round(subtotal * 0.12);
+//     const codCharge = paymentMethod === "COD" ? 20 : 0;
 
-    const totalAmount = subtotal + tax + deliveryCharge + codCharge;
+//     const totalAmount = subtotal + tax + deliveryCharge + codCharge;
 
-    const now = new Date();
+//     const now = new Date();
 
-    /* ================= CREATE ORDER ================= */
+//     /* ================= CREATE ORDER ================= */
 
-    const [order] = await Order.create(
-      [
-        {
-          user: userId,
-          items: orderItems,
-          address: formattedAddress,
+//     const [order] = await Order.create(
+//       [
+//         {
+//           user: userId,
+//           items: orderItems,
+//           address: formattedAddress,
 
-          subtotal,
-          tax,
-          deliveryCharge,
-          codCharge,
-          totalAmount,
+//           subtotal,
+//           tax,
+//           deliveryCharge,
+//           codCharge,
+//           totalAmount,
 
-          paymentMethod,
+//           paymentMethod,
 
-          // ✅ CORRECT STATES
-          paymentStatus: "pending",
-          orderStatus: "created",
+//           // ✅ CORRECT STATES
+//           paymentStatus: "pending",
+//           orderStatus: "created",
 
-          orderNumber: `ORD-${Date.now()}`,
-          orderMonth: now.getMonth() + 1,
-          orderYear: now.getFullYear(),
+//           orderNumber: `ORD-${Date.now()}`,
+//           orderMonth: now.getMonth() + 1,
+//           orderYear: now.getFullYear(),
 
 
-          isRevenueCounted: false,
+//           isRevenueCounted: false,
 
-          trafficSource: trafficSource || "direct",
-          sessionId: sessionId || null,
+//           trafficSource: trafficSource || "direct",
+//           sessionId: sessionId || null,
 
-          statusHistory: [{ status: "created", date: now }],
-        },
-      ],
-      { session },
-    );
+//           statusHistory: [{ status: "created", date: now }],
+//         },
+//       ],
+//       { session },
+//     );
     
 
-    /* ================= CLEAR CART ONLY FOR COD ================= */
+//     /* ================= CLEAR CART ONLY FOR COD ================= */
 
-    if (paymentMethod === "COD") {
-      cartDoc.items = [];
-      await cartDoc.save({ session });
-    }
+//     if (paymentMethod === "COD") {
+//       cartDoc.items = [];
+//       await cartDoc.save({ session });
+//     }
 
-    await session.commitTransaction();
+//     await session.commitTransaction();
 
-    return res.status(201).json({
-      success: true,
-      data: order,
-    });
-  } catch (err) {
-    await session.abortTransaction();
+//     return res.status(201).json({
+//       success: true,
+//       data: order,
+//     });
+//   } catch (err) {
+//     await session.abortTransaction();
 
-    console.error("Create order error:", err);
+//     console.error("Create order error:", err);
 
-    return res.status(err.status || 500).json({
-      success: false,
-      message: err.message || "Order creation failed",
-    });
-  } finally {
-    session.endSession();
-  }
-};
+//     return res.status(err.status || 500).json({
+//       success: false,
+//       message: err.message || "Order creation failed",
+//     });
+//   } finally {
+//     session.endSession();
+//   }
+// };
 
 export const checkStock = async (req, res) => {
   try {

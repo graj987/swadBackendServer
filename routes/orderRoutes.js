@@ -7,7 +7,7 @@ import {
   updateOrderStatus,
   cancelOrder,
   checkStock,
-} from "../controllers/orderController.js";
+}from "../controllers/orderController.js";
 import { isAuthenticated } from "../middleware/auth.js";
 import { getPricePreview } from "../controllers/pricePreviewController.js";
 import { generateInvoice } from "../controllers/generateInvoice.js";
@@ -15,8 +15,8 @@ import {createOrder} from "../controllers/createOrderController.js"
 
 const router = express.Router();
 
-/* ORDER ROUTES */
-router.post("/postorders", isAuthenticated, createOrder);        //Create new order
+
+router.post("/postorders", isAuthenticated, createOrder);       
 router.get("/my", isAuthenticated, getMyOrders); //Get all user's orders
 router.get("/count", getOrdersCount);
 router.get("/:id", isAuthenticated, getOrderById);
