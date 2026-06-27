@@ -278,6 +278,21 @@ export const getCounts = async (req, res) => {
   }
 };
 
+export const clearCart = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    await Cart.findOneAndUpdate(
+      { user: userId },
+      { $set: { items: [] } },
+      { new: true }
+    );
+    return res.json({ success: true, message: "Cart cleared" });
+  } catch (err) {
+    console.error("clearCart Error:", err);
+    return res.status(500).json({ success: false, message: "Failed to clear cart" });
+  }
+};
+
 export const getWishlist = async (req, res) => {
   const wishlist = await Wishlist.findOne({ user: req.user.id })
     .populate("products");

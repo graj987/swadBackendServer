@@ -5,6 +5,7 @@ import {
   getCart,
   updateCartItem,
   removeCartItem,
+  clearCart,
   toggleWishlist,
   moveWishlistToCart,
   getWishlist,
@@ -18,6 +19,7 @@ router.post("/add", isAuthenticated, addToCart);
 router.get("/", isAuthenticated, getCart);
 router.patch("/update", isAuthenticated, updateCartItem);
 router.delete("/remove/:productId", isAuthenticated, removeCartItem);
+router.delete("/clear", isAuthenticated, clearCart);
 
 /* ================= WISHLIST ================= */
 router.get("/wishlist", isAuthenticated, getWishlist);

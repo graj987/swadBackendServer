@@ -4,37 +4,66 @@ const Product = productModel;
 
 export const getProducts = async (req, res) => {
   try {
-    const products = await Product.find();
-    res.json(products);
+    const page  = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 20));
+    const skip  = (page - 1) * limit;
+
+    const filter = { isAvailable: true };
+    if (req.query.category) filter.category = req.query.category;
+    if (req.query.search) {
+      filter.$text = { $search: req.query.search };
+    }
+
+    const [products, total] = await Promise.all([
+      Product.find(filter)
+        .skip(skip)
+        .limit(limit)
+        .sort({ createdAt: -1 })
+        .lean(),
+      Product.countDocuments(filter),
+    ]);
+
+    res.json({
+      success: true,
+      data: products,
+      pagination: { page, limit, total, pages: Math.ceil(total / limit) },
+    });
   } catch (error) {
-    res.status(500).json({ message: "Error fetching products" });
+    console.error("getProducts error:", error);
+    res.status(500).json({ success: false, message: "Error fetching products" });
   }
 };
 
 export const getProductHero = async (req, res) => {
   try {
-    const product = await Product.findOne({ isHero: true });
+    const product = await Product.findOne({ isHero: true }).lean();
 
     if (!product) {
-      return res.status(404).json({ success: false });
+      return res.status(404).json({ success: false, message: "No hero product set" });
     }
 
-    const variant = product.variants[product.heroVariantIndex];
+    const variant = product.variants[product.heroVariantIndex ?? 0];
 
-    if (!variant || variant.stock === 0) {
-      return res.status(404).json({ success: false });
+    if (!variant) {
+      return res.status(404).json({ success: false, message: "Hero variant not configured" });
     }
 
     res.json({
       success: true,
       id: product._id,
+      name: product.name,
+      image: product.image,
       weight: variant.weight,
       price: variant.price,
       stock: variant.stock,
+      // Full variants array — needed by frontend hero panel size selector
+      variants: product.variants,
+      heroVariantIndex: product.heroVariantIndex ?? 0,
     });
 
   } catch (err) {
-    res.status(500).json({ success: false });
+    console.error("getProductHero error:", err);
+    res.status(500).json({ success: false, message: "Server error" });
   }
 };
 

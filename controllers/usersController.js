@@ -5,10 +5,11 @@ import { User } from "../models/userModel.js";
 import { Session } from "../models/sessionModel.js";
 import { verifyMail } from "./emailVerify/verifyMail.js";
 import { sendOtpEmail } from "./emailVerify/sendOtpMail.js";
-import { sendWelcomeEmail } from "./emailVerify/emailServices.js";
-import { sendLoginNotification } from "./emailVerify/emailServices.js";
-import { sendAccountDeletedEmail } from "./emailVerify/emailServices.js";
-import { sendPasswordChangedEmail } from "./emailVerify/emailServices.js";
+import {
+  sendWelcomeEmail,
+  sendLoginNotification,
+  sendPasswordChangedEmail,
+} from "./emailVerify/emailServices.js";
 import cloudinary from "cloudinary";
 import streamifier from "streamifier";
 import Notification from "../models/notification.js"
@@ -62,13 +63,13 @@ export const registerUser = async (req, res) => {
     user.token = verifyToken;
     await user.save();
 
-    await Notification.create({
+    const notification = await Notification.create({
       type: "user",
       title: "New User",
       message: `${user.name} just registered`,
       link: `/admin/users`,
     });
-    
+
     io.emit("admin-notification", notification);
 
     return res.status(201).json({
@@ -107,8 +108,10 @@ export const verification = async (req, res) => {
     user.token = null;
     await user.save();
 
+    await sendWelcomeEmail(user.email, user.name).catch((e) =>
+      console.error("Welcome email failed:", e.message)
+    );
     return res.json({ success: true, message: "Email verified" });
-    await sendWelcomeEmail(user.email, user.name);
 
   } catch (err) {
     console.error("Verification error:", err);
@@ -149,6 +152,10 @@ export const loginUser = async (req, res) => {
     user.isLoggedIn = true;
     await user.save();
 
+    sendLoginNotification(user.email, user.name).catch((e) =>
+      console.error("Login notification email failed:", e.message)
+    );
+
     return res.json({
       success: true,
       accessToken,
@@ -182,7 +189,6 @@ export const logoutUser = async (req, res) => {
     await User.findByIdAndUpdate(userId, { isLoggedIn: false });
 
     return res.json({ success: true, message: "Logged out" });
-    await sendAccountDeletedEmail(user.email, user.name);
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message });
   }
@@ -301,6 +307,61 @@ export const resetPassword = async (req, res) => {
     });
   }
 };
+/* =====================================================
+   RESEND OTP (same flow as forgot-password)
+===================================================== */
+export const resendOTP = async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email)
+      return res.status(400).json({ success: false, message: "Email required" });
+
+    const user = await User.findOne({ email });
+    if (!user)
+      return res.status(200).json({ success: true, message: "If the email exists, an OTP was sent" });
+
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    user.otp = otp;
+    user.otpExpiry = Date.now() + 10 * 60 * 1000;
+    await user.save();
+
+    await sendOtpEmail(otp, email).catch((e) =>
+      console.error("OTP email failed:", e.message)
+    );
+
+    return res.json({ success: true, message: "OTP resent" });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+/* =====================================================
+   REFRESH TOKEN
+===================================================== */
+export const refreshToken = async (req, res) => {
+  try {
+    const { refreshToken: token } = req.body;
+    if (!token)
+      return res.status(400).json({ success: false, message: "Refresh token required" });
+
+    let decoded;
+    try {
+      decoded = jwt.verify(token, process.env.JWT_SECRET);
+    } catch {
+      return res.status(401).json({ success: false, message: "Invalid or expired refresh token" });
+    }
+
+    const user = await User.findById(decoded.id).select("_id isBlocked");
+    if (!user || user.isBlocked)
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+
+    const accessToken = signToken({ id: user._id }, "1d");
+    return res.json({ success: true, accessToken });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
 export const changePassword = async (req, res) => {
   try {
     const userId = req.user?.id;

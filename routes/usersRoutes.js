@@ -8,6 +8,8 @@ import {
   forgotPassword,
   verifyOTP,
   resetPassword,
+  resendOTP,
+  refreshToken,
   getUserProfile,
   updateUserProfile,
   uploadAvatar,
@@ -46,13 +48,15 @@ router.post("/logout", isAuthenticated, logoutUser);
 router.post("/forgot-password", forgotPassword);
 
 // 2️⃣ Verify OTP → get resetToken
-router.post("/verify-otp", verifyOTP); 
-// email + otp in BODY (NOT URL)
+router.post("/verify-otp", verifyOTP);
+// 2b. Resend OTP
+router.post("/resend-otp", resendOTP);
 
 // 3️⃣ Reset password (token-based)
 router.post("/reset-password", resetPassword);
 // Authorization: Bearer <resetToken>
 
+router.post("/refresh", refreshToken);
 router.post("/change-password", changePassword);
 /* ================= USER PROFILE ================= */
 

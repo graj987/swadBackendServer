@@ -25,7 +25,7 @@ import {
 } from "../controllers/adminController.js";
 
 import { protectAdmin } from "../middleware/adminMiddleware.js";
-import notification from "../models/notification.js";
+import { getAdminNotifications } from "../controllers/adminNotificationController.js";
 
 
 const router = express.Router();
@@ -37,7 +37,8 @@ const upload = multer({
 });
 
 // ------------------- PUBLIC ROUTES -------------------
-router.post("/register", registerAdmin);
+// Register is protected — only existing admins can create new admins
+router.post("/register", protectAdmin, registerAdmin);
 router.post("/login", loginAdmin);
 
 // ------------------- PROTECTED ADMIN ROUTES -------------------
@@ -62,7 +63,7 @@ router.get("/products/:id", protectAdmin, getProductById);
 router.put("/products/:id", protectAdmin, updateProduct);
 router.put("/hero", protectAdmin, setHeroProduct);
 router.get("/hero", protectAdmin, getHeroProduct);
-router.get("/notificatoin", protectAdmin , notification )
+router.get("/notifications", protectAdmin, getAdminNotifications)
 
 
 router.post(

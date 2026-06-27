@@ -1,27 +1,31 @@
-import yup from "yup"
+import * as yup from "yup";
 
 export const userSchema = yup.object({
-    name: yup
-        .string()
-        .trim()
-        .min(3, 'Username must be atlease 3 character')
-        .required(),
-    email: yup
-        .string()
-        .email('The email is not valid one')
-        .required(),
-    password: yup
-        .string()
-        .min(4, 'Password must be atleaset 4 character')
-        .required()
-})
-export const validateUser = (schema) => async (req, res, next) => {
-    try {
-        await schema.validate(req.body)
-        next()
+  name: yup
+    .string()
+    .trim()
+    .min(2, "Name must be at least 2 characters")
+    .max(50, "Name must be at most 50 characters")
+    .required("Name is required"),
+  email: yup
+    .string()
+    .email("Please enter a valid email address")
+    .required("Email is required"),
+  password: yup
+    .string()
+    .min(8, "Password must be at least 8 characters")
+    .required("Password is required"),
+});
 
-    }
-    catch (err) {
-        return res.status(400).json({ error: err.errors })
-    }
-}
+export const validateUser = (schema) => async (req, res, next) => {
+  try {
+    await schema.validate(req.body, { abortEarly: false });
+    next();
+  } catch (err) {
+    return res.status(400).json({
+      success: false,
+      message: err.errors[0],
+      errors: err.errors,
+    });
+  }
+};

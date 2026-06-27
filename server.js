@@ -4,6 +4,7 @@ import cors from "cors";
 import http from "http";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
+import compression from "compression";
 import { Server } from "socket.io";
 
 dotenv.config();
@@ -38,45 +39,67 @@ const server = http.createServer(app);
 /* ================= SECURITY ================= */
 
 app.use(helmet());
+app.use(compression());
+
+const allowedOrigins = (process.env.CORS_ORIGINS || "")
+  .split(",")
+  .map((o) => o.trim())
+  .filter(Boolean);
+
+// Always allow production domains; dev origins come from env
+const CORS_ORIGINS = [
+  "https://swadbest.com",
+  "https://www.swadbest.com",
+  "https://swadbestadminpannel.onrender.com",
+  "http://localhost:5173",
+  ...allowedOrigins,
+];
 
 app.use(cors({
-  origin: [
-    "http://localhost:5173",
-    "http://localhost:5174",
-    "https://swadbest.com",
-    "https://www.swadbest.com",
-    "https://swadbestadminpannel.onrender.com"
-  ],
+  origin: (origin, callback) => {
+    if (!origin || CORS_ORIGINS.includes(origin)) return callback(null, true);
+    callback(new Error(`CORS: origin ${origin} not allowed`));
+  },
   credentials: true,
 }));
 
-app.use(express.json({ limit: "10kb" }));
+app.use(express.json({ limit: "50kb" }));
 
 /* ================= RATE LIMIT ================= */
 
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  message: { success: false, message: "Too many attempts, please try again later" },
+  standardHeaders: true,
+  legacyHeaders: false,
 });
 
 const paymentLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 50,
+  standardHeaders: true,
+  legacyHeaders: false,
 });
 
 app.use("/api", apiLimiter);
+app.use("/api/users/login", authLimiter);
+app.use("/api/users/register", authLimiter);
+app.use("/api/users/forgot-password", authLimiter);
 app.use("/api/payments", paymentLimiter);
 
 /* ================= SOCKET.IO ================= */
 
 export const io = new Server(server, {
   cors: {
-    origin: [
-      "http://localhost:5173",
-      "https://swadbest.com",
-      "https://www.swadbest.com",
-      "https://swadbestadminpannel.onrender.com"
-    ],
+    origin: CORS_ORIGINS,
     methods: ["GET", "POST"],
   },
 });
@@ -92,7 +115,19 @@ io.on("connection", (socket) => {
 /* ================= HEALTH ================= */
 
 app.get("/", (req, res) => {
-  res.json({ message: "API running..." });
+  res.json({
+    status: "ok",
+    service: "SwadBest API",
+    timestamp: new Date().toISOString(),
+  });
+});
+
+app.get("/health", (req, res) => {
+  res.json({
+    status: "ok",
+    uptime: process.uptime(),
+    timestamp: new Date().toISOString(),
+  });
 });
 
 /* ================= ROUTES ================= */

@@ -183,6 +183,7 @@ export const addProduct = async (req, res) => {
       description,
       category,
       image: uploadResult.secure_url,
+      imagePublicId: uploadResult.public_id,
       variants: variants.map(v => ({
         weight: v.weight,
         price: Number(v.price),
